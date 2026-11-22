@@ -172,7 +172,7 @@
     </div>
     <div class="tools">
       <label class="sr" for="q">Search items</label>
-      <input id="q" class="search" type="search" placeholder="Search by name or code" autocomplete="off">
+      <input id="q" class="search" type="search" placeholder="Search by name, code or number" autocomplete="off">
       <div class="chips" role="group" aria-label="Filter by item type" id="chips">
         <button class="chip" type="button" data-type="" aria-pressed="true">All</button>
         <button class="chip" type="button" data-type="raw" aria-pressed="false">Raw</button>
@@ -323,7 +323,7 @@ function renderList(){
   const body = $('#listBody');
   if (S.listState === 'loading'){
     $('#countTxt').textContent = 'Loading…';
-    body.innerHTML = tableShell([1,2,3,4,5].map(()=>`<tr class="skel">${'<td><div></div></td>'.repeat(6)}</tr>`).join(''));
+    body.innerHTML = tableShell([1,2,3,4,5].map(()=>`<tr class="skel">${'<td><div></div></td>'.repeat(7)}</tr>`).join(''));
     return;
   }
   if (S.listState === 'error'){
@@ -340,7 +340,7 @@ function renderList(){
   }
   const q = S.q.trim().toLowerCase();
   const rows = S.items.filter(i => (!S.filterType || i.item_type===S.filterType) &&
-    (!q || i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q)));
+    (!q || i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q) || String(i.item_no ?? '').includes(q)));
   $('#countTxt').textContent = S.items.length ? `${rows.length === S.items.length ? '' : rows.length + ' of '}${S.items.length} item${S.items.length===1?'':'s'}` : '';
   if (!S.items.length){
     body.innerHTML = `<div class="state"><h3>No items yet</h3><p>Add the first thing this restaurant buys. Most kitchens have 200 to 500 items.</p><button class="btn primary" type="button" id="focusName">Add an item</button></div>`;
@@ -354,6 +354,7 @@ function renderList(){
   }
   body.innerHTML = tableShell(rows.map(i => `
     <tr class="${i.id===S.lastNewId?'new-row':''}">
+      <td class="code num">${esc(i.item_no ?? '—')}</td>
       <td class="code">${esc(i.code || '—')}</td>
       <td class="name">${esc(i.name)}</td>
       <td class="col-cat">${esc(catName(i.category_id))}</td>
@@ -363,7 +364,7 @@ function renderList(){
     </tr>`).join(''));
 }
 function tableShell(tbody){
-  return `<div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Name</th><th class="col-cat">Category</th><th>Type</th><th class="col-base">Stock unit</th><th>Status</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
+  return `<div style="overflow-x:auto"><table><thead><tr><th>No.</th><th>Code</th><th>Name</th><th class="col-cat">Category</th><th>Type</th><th class="col-base">Stock unit</th><th>Status</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
 }
 function setType(t){
   S.filterType = t;
@@ -533,14 +534,14 @@ $('#itemForm').addEventListener('submit', async e => {
 
   const btn = $('#saveBtn'); btn.disabled = true; btn.textContent = 'Saving…';
   try{
-    const { data, error } = await sb.from('items').insert(row).select('id').single();
+    const { data, error } = await sb.from('items').insert(row).select('id, item_no').single();
     if (error) throw error;
     let packNote = '';
     if (packs.length){
       const { error: pErr } = await sb.from('item_pack_sizes').insert(packs.map(p => ({...p, item_id:data.id, organisation_id:S.org.id})));
       if (pErr) packNote = pErr;
     }
-    upsertItem({id:data.id, code:row.code, name:row.name, category_id:row.category_id, item_type:row.item_type, base_unit:row.base_unit, is_active:true, packs: packNote ? 0 : packs.length});
+    upsertItem({id:data.id, item_no:data.item_no, code:row.code, name:row.name, category_id:row.category_id, item_type:row.item_type, base_unit:row.base_unit, is_active:true, packs: packNote ? 0 : packs.length});
     if (packNote){
       renderList();
       banner('info', `<span><b>${esc(row.name)} was saved, but its pack sizes weren't.</b> ${esc(pgMessage(packNote))} Add them again from the item.</span>`);
@@ -600,7 +601,7 @@ function subscribe(orgId){
       const r = payload.new;
       if (!r?.id) return;
       const isNew = !S.items.some(x => x.id === r.id);
-      upsertItem({ id:r.id, code:r.code, name:r.name, category_id:r.category_id, item_type:r.item_type, base_unit:r.base_unit, is_active:r.is_active, packs: S.items.find(x=>x.id===r.id)?.packs ?? 0 });
+      upsertItem({ id:r.id, item_no:r.item_no, code:r.code, name:r.name, category_id:r.category_id, item_type:r.item_type, base_unit:r.base_unit, is_active:r.is_active, packs: S.items.find(x=>x.id===r.id)?.packs ?? 0 });
       if (isNew){ S.lastNewId = r.id; toast(`${r.name} was just added`); }
       renderList();
     })
@@ -621,7 +622,7 @@ async function loadLive(){
     const [{ data: org }, { data: cats, error: cErr }, { data: items, error: iErr }] = await Promise.all([
       sb.from('organisations').select('id, name').eq('id', orgId).single(),
       sb.from('item_categories').select('id, name').eq('organisation_id', orgId).eq('is_active', true).order('sort_order'),
-      sb.from('items').select('id, code, name, category_id, item_type, base_unit, is_active').eq('organisation_id', orgId).order('created_at', { ascending: false }),
+      sb.from('items').select('id, item_no, code, name, category_id, item_type, base_unit, is_active').eq('organisation_id', orgId).order('created_at', { ascending: false }),
     ]);
     if (cErr) throw cErr; if (iErr) throw iErr;
     S.org = org ?? { id: orgId, name: 'Your organisation' };
