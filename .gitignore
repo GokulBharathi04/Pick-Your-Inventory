@@ -1,0 +1,25 @@
+# Dependencies and builds
+node_modules/
+dist/
+build/
+.turbo/
+
+# Environment files (keep the example)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

@@ -1,0 +1,2 @@
+-- Demo data for local development and preview databases.
+-- Never applied to production. A demo restaurant with items, vendors and recipes is added in Module 1.
