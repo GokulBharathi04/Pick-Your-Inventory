@@ -50,6 +50,9 @@ Copy `.env.example` to `apps/web/.env.local` once the web app exists (Module 0).
 .github/workflows/
   db-check.yml     checks migrations on every pull request
   db-deploy-dev.yml  applies migrations to the dev project on merge to dev
+  web-preview-pages.yml  publishes apps/web-preview to GitHub Pages on merge to dev
+apps/web-preview/  two-page HTML preview (sign-in + item master) on the dev project
+design/prototypes/ design prototypes and review screenshots
 supabase/
   config.toml      Supabase CLI and deploy configuration
   migrations/      SQL migrations, applied in filename order
