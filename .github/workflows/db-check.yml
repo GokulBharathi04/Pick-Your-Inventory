@@ -1,0 +1,27 @@
+# Checks that every migration applies cleanly to a fresh database
+# before a pull request can be merged into `dev` or `main`.
+name: Check database migrations
+
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/db-check.yml"
+  workflow_dispatch:
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start a fresh local database and apply all migrations and seed data
+        run: supabase db start
+
+      - name: Lint database functions
+        run: supabase db lint --level error
