@@ -49,8 +49,22 @@ jobs:
       - name: Link the dev project
         run: supabase link --project-ref "$SUPABASE_PROJECT_ID"
 
+      # Newer CLI versions default some commands to the local stack, so the
+      # remote target is always passed explicitly. Each command is asked which
+      # flag it supports: `--remote` in current versions, `--linked` in older ones.
       - name: Show pending migrations
-        run: supabase migration list
+        run: |
+          help=$(supabase migration list --help 2>&1)
+          if grep -q -- '--remote' <<< "$help"; then flag=--remote
+          elif grep -q -- '--linked' <<< "$help"; then flag=--linked
+          else flag=""; fi
+          supabase migration list $flag
 
       - name: Apply migrations
-        run: supabase db push
+        run: |
+          help=$(supabase db push --help 2>&1)
+          if grep -q -- '--remote' <<< "$help"; then flag=--remote
+          elif grep -q -- '--linked' <<< "$help"; then flag=--linked
+          else flag=""; fi
+          echo "Running: supabase db push $flag"
+          supabase db push $flag
