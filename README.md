@@ -27,7 +27,7 @@ The deploy workflow needs two secrets under GitHub **Settings → Secrets and va
 
 | Secret | Where to get it |
 | --- | --- |
-| `SUPABASE_ACCESS_TOKEN` | Supabase dashboard → your avatar → **Account preferences → Access tokens → Generate new token** |
+| `SUPABASE_ACCESS_TOKEN_GIT` | Supabase dashboard → your avatar → **Account preferences → Access tokens → Generate new token** |
 | `DEV_DB_PASSWORD` | The database password chosen when the dev project was created. If it's lost, reset it in **Project Settings → Database**. |
 
 Run the workflow by hand at any time from the **Actions** tab (**Deploy database (dev) → Run workflow**).
