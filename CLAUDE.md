@@ -12,7 +12,8 @@ Full plan: https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK. It is built module
 ## Branches
 
 - `main` is production and `dev` is the dev environment. Feature branches open pull requests into `dev`.
-- Supabase's GitHub integration applies migrations on merge. Never apply schema changes by hand in the dashboard.
+- GitHub Actions applies migrations: `db-check.yml` tests them on every pull request, and `db-deploy-dev.yml` runs `supabase db push` to the dev project on merge to `dev`. Never apply schema changes by hand in the dashboard or through the Supabase MCP `apply_migration` tool, because that breaks the migration history.
+- The `private` schema holds internal helpers (RLS membership checks, trigger functions). It is not exposed through the Data API.
 
 ## Database rules (do not break these)
 

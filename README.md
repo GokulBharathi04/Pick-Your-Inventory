@@ -17,9 +17,20 @@ Dev API URL: `https://ngfakbdneyluggrhijyq.supabase.co`
 ## How database changes reach Supabase
 
 1. Every change is a new SQL file in `supabase/migrations/`, named `<timestamp>_<what_it_does>.sql`. No one edits tables by hand in the Supabase dashboard.
-2. Work on a feature branch and open a pull request into `dev`.
-3. Merging into `dev` makes Supabase's GitHub integration apply the new migrations to the dev project automatically.
-4. When a release is ready, open a pull request from `dev` into `main`. Once the Mumbai project exists, merging deploys it to production.
+2. Work on a feature branch and open a pull request into `dev`. The **Check database migrations** workflow applies every migration to a fresh database and must pass.
+3. Merging into `dev` runs **Deploy database (dev)**, which applies the new migrations to the dev project with the Supabase CLI.
+4. When a release is ready, open a pull request from `dev` into `main`. A production deploy workflow for the Mumbai project is added when that project is created.
+
+### One-time setup: repository secrets
+
+The deploy workflow needs two secrets under GitHub **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Where to get it |
+| --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | Supabase dashboard → your avatar → **Account preferences → Access tokens → Generate new token** |
+| `DEV_DB_PASSWORD` | The database password chosen when the dev project was created. If it's lost, reset it in **Project Settings → Database**. |
+
+Run the workflow by hand at any time from the **Actions** tab (**Deploy database (dev) → Run workflow**).
 
 ## Local setup (optional)
 
@@ -36,6 +47,9 @@ Copy `.env.example` to `apps/web/.env.local` once the web app exists (Module 0).
 ## Repository layout
 
 ```
+.github/workflows/
+  db-check.yml     checks migrations on every pull request
+  db-deploy-dev.yml  applies migrations to the dev project on merge to dev
 supabase/
   config.toml      Supabase CLI and deploy configuration
   migrations/      SQL migrations, applied in filename order
