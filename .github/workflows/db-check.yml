@@ -25,3 +25,6 @@ jobs:
 
       - name: Lint database functions
         run: supabase db lint --level error
+
+      - name: Run database tests (pgTAP)
+        run: supabase test db
