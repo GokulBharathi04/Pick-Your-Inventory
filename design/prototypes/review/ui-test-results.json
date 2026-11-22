@@ -1,0 +1,126 @@
+[
+  {
+    "name": "no horizontal overflow at 390px",
+    "pass": true,
+    "detail": "scrollWidth 390 vs viewport 390"
+  },
+  {
+    "name": "no horizontal overflow at 1440px",
+    "pass": true,
+    "detail": "scrollWidth 1440 vs viewport 1440"
+  },
+  {
+    "name": "every visible control has an accessible name",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "Tab reaches form fields in visual order",
+    "pass": true,
+    "detail": "order: name@5, code@6, category@7, base_unit@9, yield@10, hsn@17, gst@18, shelf@19, track_expiry@20, saveBtn@21"
+  },
+  {
+    "name": "keyboard focus shows a visible outline",
+    "pass": true,
+    "detail": "focused #name outline: solid 2px"
+  },
+  {
+    "name": "empty save shows name error and moves focus to it",
+    "pass": true,
+    "detail": "{\"err\":\"Give the item a name.\",\"hidden\":false,\"focus\":\"name\",\"inv\":\"true\"}"
+  },
+  {
+    "name": "duplicate code, short HSN and zero yield are rejected",
+    "pass": true,
+    "detail": "Another item already uses this code. / HSN codes are 4 to 8 digits. / Enter a yield above 0 and up to 100."
+  },
+  {
+    "name": "unit ladder shows crate → grams conversion",
+    "pass": true,
+    "detail": "1 Crate=12 kg=12,000 g in stock | Receiving 2 Crates adds 24,000 g to stock | A recipe needing 100 g usable deducts 108.696 g (92% yield)"
+  },
+  {
+    "name": "Ctrl+Enter saves, toast confirms, row appears first, form resets",
+    "pass": false,
+    "detail": "Tomato added (demo, not saved to Supabase); first row Tomato; 7 items"
+  },
+  {
+    "name": "payload matches items columns and pack converts to base units",
+    "pass": true,
+    "detail": "{\"organisation_id\":\"(your organisation id)\",\"category_id\":null,\"code\":\"VEG-TOM2\",\"name\":\"Tomato\",\"item_type\":\"raw\",\"base_unit\":\"g\",\"alt_unit\":null,\"alt_per_base\":null,\"default_yield_pct\":92,\"shelf_life_days\":null,\"track_expiry\":false,\"hsn_code\":\"0702\",\"gst_rate\":null,\"is_active\":true,\"→ item_pack_sizes\":{\"name\":\"Crate\",\"quantity_in_base\":12000}}"
+  },
+  {
+    "name": "search with no matches shows a clear-filters state",
+    "pass": true
+  },
+  {
+    "name": "loading state renders with a next action",
+    "pass": true,
+    "detail": "Code\tName\tCategory\tType\tStock unit\tStatus  \t \t \t \t \t   \t \t \t \t \t   \t \t \t \t \t   \t \t \t \t \t  "
+  },
+  {
+    "name": "empty state renders with a next action",
+    "pass": true,
+    "detail": "No items yet  Add the first thing this restaurant buys. Most kitchens have 200 to 500 item"
+  },
+  {
+    "name": "error state renders with a next action",
+    "pass": true,
+    "detail": "Couldn't load items  Supabase didn't respond. Check your connection and try again.  Try ag"
+  },
+  {
+    "name": "permission state renders with a next action",
+    "pass": true,
+    "detail": "No organisation for this account  This account isn’t a member of any organisation yet, so "
+  },
+  {
+    "name": "reduced motion turns off the loading shimmer",
+    "pass": true,
+    "detail": "animation-name: none"
+  },
+  {
+    "name": "contrast --ink #17212d on white ≥ 4.5",
+    "pass": true,
+    "detail": "16.26:1"
+  },
+  {
+    "name": "contrast --muted #5a6573 on white ≥ 4.5",
+    "pass": true,
+    "detail": "5.93:1"
+  },
+  {
+    "name": "contrast --faint #8a94a1 on white ≥ 4.5",
+    "pass": false,
+    "detail": "3.07:1"
+  },
+  {
+    "name": "contrast --teal-ink #0a5f61 on white ≥ 4.5",
+    "pass": true,
+    "detail": "7.44:1"
+  },
+  {
+    "name": "contrast --danger #b42318 on white ≥ 4.5",
+    "pass": true,
+    "detail": "6.57:1"
+  },
+  {
+    "name": "contrast --warn #8a5a00 on white ≥ 4.5",
+    "pass": true,
+    "detail": "5.93:1"
+  },
+  {
+    "name": "contrast white on teal button ≥ 4.5",
+    "pass": true,
+    "detail": "5.00:1"
+  },
+  {
+    "name": "all controls meet 24×24 px target size",
+    "pass": true,
+    "detail": ""
+  },
+  {
+    "name": "no JavaScript errors on the page",
+    "pass": true,
+    "detail": ""
+  }
+]
