@@ -66,5 +66,7 @@ jobs:
           if grep -q -- '--remote' <<< "$help"; then flag=--remote
           elif grep -q -- '--linked' <<< "$help"; then flag=--linked
           else flag=""; fi
-          echo "Running: supabase db push $flag"
-          supabase db push $flag
+          # --yes: this run is the deliberate deploy for a merge into dev, and
+          # the CLI cannot ask for confirmation without a terminal.
+          echo "Running: supabase db push $flag --yes"
+          supabase db push $flag --yes
