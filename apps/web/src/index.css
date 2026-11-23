@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #13243d;
+  --color-navy-soft: #1d3352;
+  --color-teal: #0e7c7e;
+  --color-teal-ink: #0a5f61;
+  --color-teal-wash: #e6f2f2;
+  --color-canvas: #f4f5f3;
+  --color-line: #dfe3e6;
+  --color-ink: #17212d;
+  --color-muted: #5a6573;
+  --font-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", sans-serif;
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-canvas text-ink antialiased;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
+  input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+}
+
+@layer components {
+  .input {
+    @apply h-9 w-full rounded-md border border-line bg-white px-2.5 text-sm hover:border-slate-300 disabled:bg-slate-50 disabled:text-muted;
+  }
+  textarea.input { @apply h-auto py-2; }
+  .table-wrap { @apply overflow-x-auto rounded-lg border border-line bg-white; }
+  .table { @apply w-full border-collapse text-sm; }
+  .table th {
+    @apply border-b border-line bg-slate-50 px-3 py-2 text-left text-xs font-semibold whitespace-nowrap text-muted;
+  }
+  .table td { @apply border-b border-line px-3 py-2 align-top; }
+  .table tbody tr:last-child td { @apply border-b-0; }
+  .table tbody tr.clickable { @apply cursor-pointer hover:bg-teal-wash/60; }
+  .num { @apply text-right tabular-nums whitespace-nowrap; }
+  .table th.num { @apply text-right; }
+}

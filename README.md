@@ -3,7 +3,7 @@
 Restaurant inventory, procurement and owner dashboard, built by Pick your Pixel.
 
 - **Blueprint:** [Pick your inventory — Detailed build blueprint](https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK). It covers the modules, data model and build order.
-- **Status:** the repo is connected to Supabase. Module 0 (Foundation) is next.
+- **Status:** the database for Modules 0 to 3 (foundation, masters, stock ledger, recipes and sales) is on the dev project, and the web app in `apps/web` covers every inventory form and report for testing. Module 4 (procurement: reorder planning, purchase orders, goods receipts) and department issues and end-of-day returns are built; store stock is now the planning stock. Accounts payable (Module 5) is next.
 
 ## Environments
 
@@ -42,22 +42,26 @@ supabase db reset                                # rebuild local DB from migrati
 supabase link --project-ref ngfakbdneyluggrhijyq # link to the dev project
 ```
 
-Copy `.env.example` to `apps/web/.env.local` once the web app exists (Module 0).
+Copy `.env.example` to `apps/web/.env.local` to point the web app at a different project. See `apps/web/README.md`.
 
 ## Repository layout
 
 ```
 .github/workflows/
   db-check.yml     checks migrations on every pull request
-  db-deploy-dev.yml  applies migrations to the dev project on merge to dev
-  web-preview-pages.yml  publishes apps/web-preview to GitHub Pages on merge to dev
-apps/web-preview/  two-page HTML preview (sign-in + item master) on the dev project
+  db-deploy-dev.yml  applies migrations and deploys Edge Functions to the dev project on merge to dev
+  web-check.yml    type-checks and builds the web app on every pull request
+  web-preview-pages.yml  publishes apps/web to GitHub Pages on merge to dev (old preview under /preview/)
+apps/web/          the web app: React + TypeScript + Vite + Tailwind
+apps/web-preview/  the first two-page HTML preview, kept under /preview/
 design/prototypes/ design prototypes and review screenshots
 supabase/
   config.toml      Supabase CLI and deploy configuration
+  functions/       Edge Functions (create-staff-user)
   migrations/      SQL migrations, applied in filename order
+  tests/database/  pgTAP tests, run in CI
   seed.sql         demo data for local and preview databases
 CLAUDE.md          conventions for Claude Code sessions
 ```
 
-`apps/web` (React web app) and `packages/core` (shared logic) arrive with Module 0.
+`packages/core` (shared logic for the sync engine and the desktop and mobile wrappers) comes later.

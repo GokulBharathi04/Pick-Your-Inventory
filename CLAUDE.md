@@ -24,6 +24,12 @@ Full plan: https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK. It is built module
   - `up` (outlet → cloud): stock ledger, transfers, wastage, adjustments, counts, prep batches, sales.
 - The sync engine is a later module. Its groundwork is in place: `public.sync_nodes`, `private.sync_cursors` and `private.sync_tombstones`.
 
+## Planning stock and departments
+
+- Planning stock (`public.planning_stock`) is the stock in an outlet's `store` locations, counting every movement except `sale`, `prep_production` and `prep_consumption`. In practice it moves with goods receipts, department issues and returns, transfers, store wastage, adjustments and counts. Reorder levels and `reorder_suggestions()` use planning stock plus what is on open purchase orders.
+- Departments (`public.departments`, per outlet) hold no stock. `post_department_movement` issues stock out of a store (`department_issue`, negative) or takes an end-of-day return back (`department_return`, positive). A return is capped at what that department was issued that business day, less what it has already returned. Issued minus returned is what the department used (`department_usage()`).
+- Issues, returns, purchase orders and goods receipts are written only by their functions. Their tables are read-only to `authenticated`. Document numbers come from `private.next_doc_no` (ISS-, RET-, PO-, GRN-).
+
 ## Database rules (do not break these)
 
 - Every schema change is a NEW file in `supabase/migrations/` named `<UTC timestamp YYYYMMDDHHMMSS>_<snake_name>.sql`. Never edit a migration that has been merged.
@@ -37,6 +43,13 @@ Full plan: https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK. It is built module
 - Deactivate rather than delete master data (items, vendors, users).
 - A new module adds its permission codes to `public.permissions`, its default role grants to `private.default_role_permissions` (and backfills existing roles), and its side-menu tabs to `public.app_tabs`.
 - Recipes are versioned: only drafts change, one version is active, activating retires the previous one.
+
+## Web app and Edge Functions
+
+- `apps/web` is the web app. One page per `public.app_tabs` key; a tab shows when the role holds its `view_permission`. Hash routing (`#/items`) so the static build works on GitHub Pages and in the wrappers.
+- Screens never write stock rows: they call the posting functions (`post_wastage`, `send_stock_transfer`, `post_sales_import`, …). Masters are plain table writes that RLS and column grants check.
+- Edge Functions live in `supabase/functions/` and deploy with `db-deploy-dev.yml` on merge to `dev`. They run with `verify_jwt = false` (the new API keys aren't JWTs), so each function checks the caller itself and does permission checks in the database as the caller.
+- `web-check.yml` type-checks and builds the app on pull requests; the Pages workflow publishes it from `dev`.
 
 ## Tests
 
