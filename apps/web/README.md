@@ -20,9 +20,10 @@ It reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` from
 
 | Area | Screens |
 | --- | --- |
-| Setup | Sign in, home with getting-started checklist, settings (business, outlets, storage locations), users (staff logins), roles (permissions and the tabs they open) |
+| Setup | Sign in, home with getting-started checklist, settings (business, outlets, storage locations, departments), users (staff logins), roles (permissions and the tabs they open) |
 | Masters | Items (details, pack sizes, per-outlet reorder settings, vendor rates), item categories, vendors and price lists, CSV import (items, vendors, rates, opening stock) |
-| Stock | Stock on hand (by item and by location), stock card, opening stock and adjustments (request and approve), transfers (send, receive, cancel), wastage and staff meals (record, void), counts (blind count sheet, submit, approve) |
+| Stock | Stock on hand (store planning stock, by item, by location), stock card, issues to departments and end-of-day returns (with what each department used), opening stock and adjustments (request and approve), transfers (send, receive, cancel), wastage and staff meals (record, void), counts (blind count sheet, submit, approve) |
+| Purchasing | Reorder planning (items at their reorder level, one draft order per vendor), purchase orders (draft, submit, approve or send back, cancel, close short), goods receipts (against an order or without one, extra quantities, void) |
 | Kitchen and sales | Menu and recipes (versioned recipe builder with live cost), prep recipes, prep production, sales entry and CSV upload with matching |
 | Reports | Stock valuation, movement summary, movement history, consumption, theoretical against actual usage, wastage, count variance, sales by dish, food cost per dish; every report exports to CSV |
 

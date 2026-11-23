@@ -160,8 +160,9 @@ const statusTones: Record<string, Tone> = {
   draft: 'grey', pending: 'amber', in_progress: 'blue', sent: 'blue', submitted: 'amber',
   posted: 'green', received: 'green', approved: 'green', active: 'green',
   rejected: 'red', cancelled: 'grey', voided: 'red', retired: 'grey', inactive: 'grey',
+  partially_received: 'blue', closed: 'grey', issue: 'amber', return: 'teal',
 };
-const statusLabels: Record<string, string> = { in_progress: 'In progress', sent: 'In transit' };
+const statusLabels: Record<string, string> = { in_progress: 'In progress', sent: 'In transit', partially_received: 'Part received', closed: 'Closed short' };
 
 export function StatusBadge({ status }: { status: string }) {
   const label = statusLabels[status] ?? (status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' '));

@@ -40,10 +40,12 @@ export function errorText(e: unknown): string {
   return msg;
 }
 
-type Result<T> = { data: T | null; error: unknown };
+// The row type comes from the caller (run<Item[]>(…)), not from the query
+// builder, so a query that selects only some columns still type-checks.
+type Result = { data: unknown; error: unknown };
 
 // Awaits a Supabase call and throws its error, so screens can use try/catch.
-export async function run<T>(call: PromiseLike<Result<T>>): Promise<T> {
+export async function run<T>(call: PromiseLike<Result>): Promise<T> {
   const { data, error } = await call;
   if (error) throw error;
   return data as T;
@@ -51,12 +53,12 @@ export async function run<T>(call: PromiseLike<Result<T>>): Promise<T> {
 
 // Reads every row of a query, a thousand at a time (the API's page size).
 export async function selectAll<T>(
-  build: (from: number, to: number) => PromiseLike<Result<T[]>>,
+  build: (from: number, to: number) => PromiseLike<Result>,
 ): Promise<T[]> {
   const page = 1000;
   const rows: T[] = [];
   for (let from = 0; ; from += page) {
-    const chunk = await run(build(from, from + page - 1));
+    const chunk = await run<T[]>(build(from, from + page - 1));
     rows.push(...(chunk ?? []));
     if (!chunk || chunk.length < page) break;
   }

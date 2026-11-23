@@ -24,6 +24,12 @@ Full plan: https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK. It is built module
   - `up` (outlet → cloud): stock ledger, transfers, wastage, adjustments, counts, prep batches, sales.
 - The sync engine is a later module. Its groundwork is in place: `public.sync_nodes`, `private.sync_cursors` and `private.sync_tombstones`.
 
+## Planning stock and departments
+
+- Planning stock (`public.planning_stock`) is the stock in an outlet's `store` locations, counting every movement except `sale`, `prep_production` and `prep_consumption`. In practice it moves with goods receipts, department issues and returns, transfers, store wastage, adjustments and counts. Reorder levels and `reorder_suggestions()` use planning stock plus what is on open purchase orders.
+- Departments (`public.departments`, per outlet) hold no stock. `post_department_movement` issues stock out of a store (`department_issue`, negative) or takes an end-of-day return back (`department_return`, positive). A return is capped at what that department was issued that business day, less what it has already returned. Issued minus returned is what the department used (`department_usage()`).
+- Issues, returns, purchase orders and goods receipts are written only by their functions. Their tables are read-only to `authenticated`. Document numbers come from `private.next_doc_no` (ISS-, RET-, PO-, GRN-).
+
 ## Database rules (do not break these)
 
 - Every schema change is a NEW file in `supabase/migrations/` named `<UTC timestamp YYYYMMDDHHMMSS>_<snake_name>.sql`. Never edit a migration that has been merged.

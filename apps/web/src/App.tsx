@@ -25,6 +25,10 @@ import Menu from './pages/Menu';
 import Production from './pages/Production';
 import Sales from './pages/Sales';
 import Reports from './pages/Reports';
+import Issues from './pages/Issues';
+import Reorder from './pages/Reorder';
+import PurchaseOrders from './pages/PurchaseOrders';
+import Receipts from './pages/Receipts';
 
 // Screens for each side-menu tab (public.app_tabs). Tabs without a screen yet
 // (such as the audit log) stay hidden.
@@ -35,7 +39,11 @@ const screens: Record<string, ComponentType> = {
   stock: StockOnHand,
   adjustments: Adjustments,
   transfers: Transfers,
+  issues: Issues,
   wastage: Wastage,
+  reorder: Reorder,
+  purchase_orders: PurchaseOrders,
+  receipts: Receipts,
   counts: Counts,
   menu: Menu,
   production: Production,
@@ -102,8 +110,10 @@ function Shell() {
     return out;
   }, [tabs]);
 
-  const key = route.segments[0] ?? 'home';
-  const tab = (tabsQ.data ?? []).find(t => t.key === key);
+  // The URL segment is the tab's path (/purchase-orders); the screen is found by the tab's key (purchase_orders).
+  const segment = route.segments[0] ?? '';
+  const tab = (tabsQ.data ?? []).find(t => t.path === '/' + segment);
+  const key = tab?.key ?? (segment || 'home');
   let Screen: ComponentType | undefined = screens[key];
   let allowed = !tab?.view_permission || can(tab.view_permission);
   if (key === 'import') { Screen = ImportData; allowed = can('masters.edit') || can('stock.adjust'); }

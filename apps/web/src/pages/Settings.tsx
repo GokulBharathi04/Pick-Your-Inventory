@@ -3,7 +3,7 @@ import { useAccess } from '../lib/access';
 import { useRefData } from '../lib/refdata';
 import { useAction, useLoad } from '../lib/hooks';
 import { run, sb } from '../lib/supabase';
-import type { Organisation, Outlet, StorageLocation } from '../lib/types';
+import type { Department, Organisation, Outlet, StorageLocation } from '../lib/types';
 import { Badge, Button, Checkbox, DataTable, ErrorNote, Field, FormGrid, Loading, Modal, PageHeader, Section, Select, useToast } from '../components/ui';
 import { humanize } from '../lib/format';
 
@@ -18,6 +18,7 @@ export default function Settings() {
   const outletsQ = useLoad(() => run<Outlet[]>(sb.from('outlets').select('*').eq('organisation_id', orgId).order('name')), [orgId]);
   const [editOutlet, setEditOutlet] = useState<Outlet | 'new' | null>(null);
   const [editLoc, setEditLoc] = useState<{ loc: StorageLocation | null; outletId: string } | null>(null);
+  const [editDept, setEditDept] = useState<{ dept: Department | null; outletId: string } | null>(null);
 
   const afterOutletChange = async () => {
     outletsQ.reload();
@@ -47,6 +48,7 @@ export default function Settings() {
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="secondary" onClick={() => setEditLoc({ loc: null, outletId: o.id })}>Add location</Button>
+                    <Button size="sm" variant="secondary" onClick={() => setEditDept({ dept: null, outletId: o.id })}>Add department</Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditOutlet(o)}>Edit outlet</Button>
                   </div>
                 </div>
@@ -58,6 +60,14 @@ export default function Settings() {
                       { label: 'Kind', render: l => humanize(l.kind) },
                       { label: 'Status', render: l => (l.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>) },
                     ]} />
+                  <h3 className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Departments</h3>
+                  <DataTable rows={ref.departments.filter(d => d.outlet_id === o.id)} rowKey={d => d.id} onRowClick={d => setEditDept({ dept: d, outletId: o.id })}
+                    empty="No departments yet. Add the sections that take stock from the store, such as Tandoor, Chinese or Bar."
+                    columns={[
+                      { label: 'Department', render: d => d.name },
+                      { label: 'Code', render: d => d.code ?? '—' },
+                      { label: 'Status', render: d => (d.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>) },
+                    ]} />
                 </div>
               </div>
             );
@@ -67,7 +77,38 @@ export default function Settings() {
 
       {editOutlet && <OutletModal outlet={editOutlet === 'new' ? null : editOutlet} onClose={() => setEditOutlet(null)} onSaved={afterOutletChange} />}
       {editLoc && <LocationModal loc={editLoc.loc} outletId={editLoc.outletId} onClose={() => setEditLoc(null)} onSaved={() => void ref.reload()} />}
+      {editDept && <DepartmentModal dept={editDept.dept} outletId={editDept.outletId} onClose={() => setEditDept(null)} onSaved={() => void ref.reload()} />}
     </div>
+  );
+}
+
+function DepartmentModal({ dept, outletId, onClose, onSaved }: { dept: Department | null; outletId: string; onClose: () => void; onSaved: () => void }) {
+  const { orgId } = useAccess();
+  const toast = useToast();
+  const { busy, error, act } = useAction();
+  const [name, setName] = useState(dept?.name ?? '');
+  const [code, setCode] = useState(dept?.code ?? '');
+  const [active, setActive] = useState(dept?.is_active ?? true);
+  const save = () => act(async () => {
+    if (!name.trim()) throw new Error('Give the department a name');
+    const values = { name: name.trim(), code: orNull(code.toUpperCase()) };
+    if (dept) await run(sb.from('departments').update({ ...values, is_active: active }).eq('id', dept.id));
+    else await run(sb.from('departments').insert({ ...values, organisation_id: orgId, outlet_id: outletId }));
+    toast(dept ? 'Department saved' : 'Department added');
+    onSaved();
+    onClose();
+  });
+  return (
+    <Modal open title={dept ? `Edit ${dept.name}` : 'Add department'} onClose={onClose}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button busy={busy} onClick={() => void save()}>Save</Button></>}>
+      <ErrorNote error={error} />
+      <FormGrid>
+        <Field label="Name"><input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Tandoor" autoFocus /></Field>
+        <Field label="Code" hint="Optional, e.g. TDR"><input className="input uppercase" value={code} onChange={e => setCode(e.target.value)} /></Field>
+      </FormGrid>
+      <p className="mt-3 text-xs text-muted">A department takes stock from the store during the day and returns what is left at the end of the day. What it doesn’t return counts as used.</p>
+      {dept && <div className="mt-3"><Checkbox label="Active" checked={active} onChange={setActive} /></div>}
+    </Modal>
   );
 }
 

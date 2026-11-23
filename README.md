@@ -3,7 +3,7 @@
 Restaurant inventory, procurement and owner dashboard, built by Pick your Pixel.
 
 - **Blueprint:** [Pick your inventory — Detailed build blueprint](https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK). It covers the modules, data model and build order.
-- **Status:** the database for Modules 0 to 3 (foundation, masters, stock ledger, recipes and sales) is on the dev project, and the web app in `apps/web` covers every inventory form and report for testing. Procurement (Module 4) is next.
+- **Status:** the database for Modules 0 to 3 (foundation, masters, stock ledger, recipes and sales) is on the dev project, and the web app in `apps/web` covers every inventory form and report for testing. Module 4 (procurement: reorder planning, purchase orders, goods receipts) and department issues and end-of-day returns are built; store stock is now the planning stock. Accounts payable (Module 5) is next.
 
 ## Environments
 

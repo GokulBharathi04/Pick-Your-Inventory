@@ -58,11 +58,11 @@ select is((select count(*)::int from public.roles where organisation_id = 'aaaaa
 
 select is((select count(*)::int from public.role_permissions rp join public.roles r on r.id = rp.role_id
            where r.organisation_id = 'aaaaaaaa-0000-0000-0000-000000000001' and r.key = 'admin'),
-          18, 'admin gets every permission except owner-only ones');
+          23, 'admin gets every permission except owner-only ones');
 
 select is((select count(*)::int from public.role_permissions rp join public.roles r on r.id = rp.role_id
            where r.organisation_id = 'aaaaaaaa-0000-0000-0000-000000000001' and r.key = 'storekeeper'),
-          6, 'storekeeper gets its 6 default permissions');
+          9, 'storekeeper gets its 9 default permissions');
 
 select is((select count(*)::int from public.units), 6, 'six shared units are seeded');
 

@@ -139,6 +139,59 @@ export type Member = {
 
 export type ItemCost = { item_id: string; unit_cost: Num };
 
+// Departments, issues and end-of-day returns
+export type Department = { id: string; organisation_id: string; outlet_id: string; name: string; code: string | null; is_active: boolean };
+
+export type DepartmentIssue = {
+  id: string; organisation_id: string; outlet_id: string; department_id: string; location_id: string; kind: 'issue' | 'return';
+  doc_no: string | null; business_date: string; note: string | null; occurred_at: string; recorded_by: string | null;
+  voided_at: string | null; void_reason: string | null;
+};
+
+export type DepartmentIssueLine = { id: string; issue_id: string; item_id: string; quantity: Num };
+
+export type DepartmentUsage = {
+  business_date: string; department_id: string; item_id: string; issued: Num; returned: Num; used: Num; used_value: Num;
+};
+
+// Planning stock: store stock moved only by the supply chain
+export type PlanningStock = {
+  organisation_id: string; outlet_id: string; item_id: string; quantity: Num; value: Num; average_cost: Num | null; on_order: Num;
+  reorder_level: Num | null; reorder_qty: Num | null; max_level: Num | null; below_reorder_level: boolean; is_negative: boolean;
+};
+
+// Procurement
+export type PurchaseOrderStatus = 'draft' | 'submitted' | 'approved' | 'partially_received' | 'received' | 'closed' | 'cancelled';
+
+export type PurchaseOrder = {
+  id: string; organisation_id: string; outlet_id: string; vendor_id: string; po_no: string | null; deliver_to_location_id: string;
+  status: PurchaseOrderStatus; order_date: string; expected_date: string | null; note: string | null; total_amount: Num; tax_amount: Num;
+  created_by: string | null; submitted_at: string | null; decided_by: string | null; decided_at: string | null; decision_note: string | null;
+  closed_at: string | null; close_reason: string | null; created_at: string;
+};
+
+export type PurchaseOrderLine = {
+  id: string; purchase_order_id: string; item_id: string; pack_size_id: string | null; unit: string | null; base_per_unit: Num;
+  quantity: Num; rate: Num; gst_rate: Num | null; quantity_in_base: Num; rate_per_base: Num; amount: Num; received_in_base: Num; note: string | null;
+};
+
+export type GoodsReceipt = {
+  id: string; organisation_id: string; outlet_id: string; vendor_id: string; purchase_order_id: string | null; grn_no: string | null;
+  location_id: string; invoice_no: string | null; invoice_date: string | null; received_at: string; total_amount: Num; tax_amount: Num;
+  note: string | null; received_by: string | null; voided_at: string | null; void_reason: string | null;
+};
+
+export type GoodsReceiptLine = {
+  id: string; receipt_id: string; purchase_order_line_id: string | null; item_id: string; pack_size_id: string | null; unit: string | null;
+  base_per_unit: Num; quantity: Num; rate: Num; gst_rate: Num | null; quantity_in_base: Num; amount: Num;
+};
+
+export type ReorderSuggestion = {
+  item_id: string; on_hand: Num; on_order: Num; reorder_level: Num; reorder_qty: Num | null; max_level: Num | null; suggested_base: Num;
+  vendor_id: string | null; pack_size_id: string | null; unit: string | null; rate: Num | null; base_per_unit: Num | null;
+  suggested_units: Num | null; lead_time_days: number | null;
+};
+
 export type RecipeCost = {
   recipe_id: string; menu_item_id: string | null; prep_item_id: string | null; version: number; status: string; yield_qty: Num;
   total_cost: Num; cost_per_unit: Num; selling_price: Num | null; food_cost_pct: Num | null;

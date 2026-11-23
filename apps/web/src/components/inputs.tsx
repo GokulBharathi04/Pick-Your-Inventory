@@ -54,6 +54,43 @@ export function LocationSelect({ value, onChange, placeholder = 'Choose a locati
   return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} />;
 }
 
+// Store locations of the outlet: issues, returns and goods receipts use only these.
+export function StoreSelect({ value, onChange, placeholder = 'Choose a store' }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
+  const { outletStores } = useRefData();
+  const options = outletStores.filter(l => l.is_active || l.id === value).map(l => ({ value: l.id, label: l.name }));
+  return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} />;
+}
+
+export function DepartmentSelect({ value, onChange, placeholder = 'Choose a department' }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
+  const { outletDepartments } = useRefData();
+  const options = outletDepartments.filter(d => d.is_active || d.id === value).map(d => ({ value: d.id, label: d.name }));
+  return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} />;
+}
+
+export function VendorSelect({ value, onChange, placeholder = 'Choose a vendor', disabled }: { value: string; onChange: (id: string) => void; placeholder?: string; disabled?: boolean }) {
+  const { vendors } = useRefData();
+  const options = vendors.filter(v => v.is_active || v.id === value).map(v => ({ value: v.id, label: v.name }));
+  return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} disabled={disabled} />;
+}
+
+// How an item is bought: one of its pack sizes ("pack:<id>") or a unit code.
+export type PurchaseUnit = { packSizeId: string | null; unit: string | null };
+export const purchaseUnitValue = (p: PurchaseUnit) => (p.packSizeId ? `pack:${p.packSizeId}` : p.unit ?? '');
+export const parsePurchaseUnit = (v: string): PurchaseUnit => (v.startsWith('pack:') ? { packSizeId: v.slice(5), unit: null } : { packSizeId: null, unit: v || null });
+
+export function PurchaseUnitSelect({ item, value, onChange, disabled }: { item: Item | undefined; value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  const { units, packSizes } = useRefData();
+  const packs = item ? packSizes.filter(p => p.item_id === item.id && (p.is_active || `pack:${p.id}` === value)) : [];
+  const unitChoices = unitsFor(item, units);
+  return (
+    <select className="input w-36 shrink-0" value={value} onChange={e => onChange(e.target.value)} disabled={disabled || !item}>
+      {!item && <option value="">—</option>}
+      {packs.map(p => <option key={p.id} value={`pack:${p.id}`}>{p.name}</option>)}
+      {unitChoices.map(u => <option key={u.code} value={u.code}>{u.code}</option>)}
+    </select>
+  );
+}
+
 // Screens that work on one outlet show this until an outlet exists.
 export function NeedsOutlet({ children }: { children: ReactNode }) {
   const { outlet, can } = useAccess();
