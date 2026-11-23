@@ -38,6 +38,13 @@ Full plan: https://claude.ai/artifact/6zHm58Lw3aPEpcTSZ1y5DK. It is built module
 - A new module adds its permission codes to `public.permissions`, its default role grants to `private.default_role_permissions` (and backfills existing roles), and its side-menu tabs to `public.app_tabs`.
 - Recipes are versioned: only drafts change, one version is active, activating retires the previous one.
 
+## Web app and Edge Functions
+
+- `apps/web` is the web app. One page per `public.app_tabs` key; a tab shows when the role holds its `view_permission`. Hash routing (`#/items`) so the static build works on GitHub Pages and in the wrappers.
+- Screens never write stock rows: they call the posting functions (`post_wastage`, `send_stock_transfer`, `post_sales_import`, …). Masters are plain table writes that RLS and column grants check.
+- Edge Functions live in `supabase/functions/` and deploy with `db-deploy-dev.yml` on merge to `dev`. They run with `verify_jwt = false` (the new API keys aren't JWTs), so each function checks the caller itself and does permission checks in the database as the caller.
+- `web-check.yml` type-checks and builds the app on pull requests; the Pages workflow publishes it from `dev`.
+
 ## Tests
 
 - pgTAP tests live in `supabase/tests/database/*.test.sql` and run in CI with `supabase test db`. Add tests for every new rule, especially RLS isolation between organisations and outlets.

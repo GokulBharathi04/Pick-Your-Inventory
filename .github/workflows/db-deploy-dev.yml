@@ -1,5 +1,6 @@
-# Applies new migrations in supabase/migrations to the DEV Supabase project
-# whenever they land on the `dev` branch.
+# Applies new migrations in supabase/migrations to the DEV Supabase project,
+# and deploys the Edge Functions in supabase/functions, whenever they land on
+# the `dev` branch.
 #
 # Needs two repository secrets (Settings > Secrets and variables > Actions):
 #   SUPABASE_ACCESS_TOKEN_GIT  personal access token from supabase.com/dashboard/account/tokens
@@ -13,6 +14,7 @@ on:
     branches: [dev]
     paths:
       - "supabase/migrations/**"
+      - "supabase/functions/**"
       - "supabase/config.toml"
       - ".github/workflows/db-deploy-dev.yml"
   workflow_dispatch:
@@ -70,3 +72,12 @@ jobs:
           # the CLI cannot ask for confirmation without a terminal.
           echo "Running: supabase db push $flag --yes"
           supabase db push $flag --yes
+
+      - name: Deploy Edge Functions
+        run: |
+          for dir in supabase/functions/*/; do
+            name=$(basename "$dir")
+            [ "${name#_}" != "$name" ] && continue   # skip shared folders such as _shared
+            echo "Deploying $name"
+            supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+          done
