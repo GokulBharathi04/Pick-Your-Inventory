@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Sign in · Pick your inventory</title>
+<style>
+  :root{
+    --navy:#13243d; --teal:#0e7c7e; --teal-ink:#0a5f61; --bg:#f4f5f3; --ink:#17212d; --muted:#5a6573;
+    --line:#dfe3e6; --danger:#b42318; --danger-wash:#fdecea; --r:8px; --r-sm:6px;
+    --font:"Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%}
+  body{font:14px/1.45 var(--font); color:var(--ink); background:var(--bg); display:grid; grid-template-rows:auto 1fr; -webkit-font-smoothing:antialiased}
+  button,input{font:inherit; color:inherit}
+  :focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+  .bar{display:flex; align-items:center; gap:10px; padding:0 20px; height:52px; background:var(--navy); color:#fff; font-weight:600}
+  .mark{width:22px; height:22px; border-radius:5px; background:var(--teal); display:grid; place-items:center; font-size:12px; font-weight:700}
+  main{display:grid; place-items:center; padding:24px 16px}
+  .card{width:min(380px,100%); background:#fff; border:1px solid var(--line); border-radius:var(--r); padding:24px}
+  h1{margin:0 0 4px; font-size:18px}
+  p.sub{margin:0 0 18px; color:var(--muted)}
+  .f{display:flex; flex-direction:column; gap:4px; margin-bottom:14px}
+  label{font-size:12.5px; font-weight:500; color:#2b3644}
+  .in{height:38px; border:1px solid var(--line); border-radius:var(--r-sm); padding:0 10px; background:#fff; width:100%}
+  .in:hover{border-color:#c9cfd4}
+  .in[aria-invalid="true"]{border-color:var(--danger)}
+  .err{background:var(--danger-wash); color:var(--danger); border-radius:var(--r-sm); padding:8px 10px; font-size:13px; margin-bottom:14px}
+  .btn{width:100%; height:40px; border-radius:var(--r-sm); border:1px solid var(--teal); background:var(--teal); color:#fff; font-weight:600; cursor:pointer}
+  .btn:hover{background:var(--teal-ink)}
+  .btn:disabled{opacity:.6; cursor:progress}
+</style>
+</head>
+<body>
+<header class="bar"><span class="mark" aria-hidden="true">P</span>Pick your inventory</header>
+<main>
+  <form class="card" id="loginForm" novalidate>
+    <h1>Sign in</h1>
+    <p class="sub">Use your username and password to open the item master.</p>
+    <div class="err" id="err" role="alert" hidden></div>
+    <div class="f">
+      <label for="username">Username</label>
+      <input class="in" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
+    </div>
+    <div class="f">
+      <label for="password">Password</label>
+      <input class="in" id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button class="btn" type="submit" id="go">Sign in</button>
+  </form>
+</main>
+
+<script type="module">
+import { sb, toEmail } from './assets/supabase.js';
+const $ = s => document.querySelector(s);
+
+// Already signed in? Go straight to the item master.
+const { data: { session } } = await sb.auth.getSession();
+if (session) location.replace('items.html');
+
+function showErr(msg){ const e = $('#err'); e.textContent = msg; e.hidden = !msg; }
+
+$('#loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  showErr('');
+  const user = $('#username').value.trim(), pw = $('#password').value;
+  $('#username').setAttribute('aria-invalid', String(!user));
+  $('#password').setAttribute('aria-invalid', String(!pw));
+  if (!user || !pw){ showErr('Enter your username and password.'); (user ? $('#password') : $('#username')).focus(); return; }
+
+  const go = $('#go'); go.disabled = true; go.textContent = 'Signing in…';
+  try{
+    const { error } = await sb.auth.signInWithPassword({ email: toEmail(user), password: pw });
+    if (error) throw error;
+    location.replace('items.html');
+  } catch(err){
+    const m = err?.message || '';
+    showErr(/invalid login/i.test(m) ? 'Wrong username or password.'
+          : /fetch|network/i.test(m) ? "Couldn't reach the server. Check your connection."
+          : m || 'Sign-in failed.');
+    $('#password').select();
+  } finally { go.disabled = false; go.textContent = 'Sign in'; }
+});
+</script>
+</body>
+</html>

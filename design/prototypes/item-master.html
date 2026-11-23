@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Item master · Pick your inventory</title>
+<style>
+  :root{
+    --navy:#13243d; --navy-2:#1d3352; --teal:#0e7c7e; --teal-ink:#0a5f61; --teal-wash:#e3f2f1;
+    --bg:#f4f5f3; --surface:#ffffff; --ink:#17212d; --muted:#5a6573; --faint:#8a94a1;
+    --line:#dfe3e6; --line-2:#eceff1;
+    --danger:#b42318; --danger-wash:#fdecea; --ok:#1d7349; --ok-wash:#e6f4ec; --warn:#8a5a00; --warn-wash:#fdf3dc;
+    --r:8px; --r-sm:6px;
+    --font: "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font:14px/1.45 var(--font); color:var(--ink); background:var(--bg); -webkit-font-smoothing:antialiased}
+  button,input,select{font:inherit; color:inherit}
+  .num{font-variant-numeric:tabular-nums}
+  :focus-visible{outline:2px solid var(--teal); outline-offset:2px}
+
+  /* top bar */
+  .bar{display:flex; align-items:center; gap:16px; padding:0 20px; height:52px; background:var(--navy); color:#fff}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.1px; white-space:nowrap}
+  .mark{width:22px; height:22px; border-radius:5px; background:var(--teal); display:grid; place-items:center; font-size:12px; font-weight:700}
+  .crumb{color:#aab6c6; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .crumb b{color:#fff; font-weight:500}
+  .bar .spacer{flex:1}
+  .conn{display:flex; align-items:center; gap:8px; font-size:12.5px; color:#d6deea; white-space:nowrap}
+  .dot{width:8px; height:8px; border-radius:50%; background:#e2b04a}
+  .dot.live{background:#4cc38a}
+  .btn-bar{background:transparent; border:1px solid #3b5274; color:#fff; border-radius:var(--r-sm); padding:5px 10px; cursor:pointer}
+  .btn-bar:hover{background:var(--navy-2)}
+
+  /* layout */
+  .wrap{display:grid; grid-template-columns:minmax(0,1fr) 420px; gap:20px; padding:20px; max-width:1440px; margin:0 auto; align-items:start}
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--r)}
+  .panel-h{display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line-2)}
+  .panel-h h1,.panel-h h2{font-size:15px; margin:0; font-weight:600}
+  .count{color:var(--muted); font-size:13px}
+
+  /* list */
+  .tools{display:flex; flex-wrap:wrap; gap:8px; padding:12px 16px; border-bottom:1px solid var(--line-2)}
+  .search{flex:1 1 220px; min-width:0; height:34px; border:1px solid var(--line); border-radius:var(--r-sm); padding:0 10px 0 32px;
+    background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%238a94a1' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 10px center}
+  .chips{display:flex; gap:4px; flex-wrap:wrap}
+  .chip{height:34px; padding:0 12px; border:1px solid var(--line); background:#fff; border-radius:var(--r-sm); cursor:pointer; color:var(--muted)}
+  .chip[aria-pressed="true"]{background:var(--teal-wash); border-color:#a9d6d3; color:var(--teal-ink); font-weight:600}
+  table{width:100%; border-collapse:collapse}
+  th{font-size:12px; font-weight:600; color:var(--muted); text-align:left; padding:9px 16px; border-bottom:1px solid var(--line); background:#fafbfa; white-space:nowrap}
+  td{padding:10px 16px; border-bottom:1px solid var(--line-2); vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:#fafcfb}
+  td.code{font-family:var(--mono); font-size:12.5px; color:var(--muted); white-space:nowrap}
+  td.name{font-weight:500}
+  .tag{display:inline-block; font-size:12px; padding:1px 8px; border-radius:20px; background:var(--line-2); color:var(--muted); white-space:nowrap}
+  .tag.prep{background:#efe9fb; color:#5b3fa0}
+  .tag.packaging{background:#fdf0e3; color:#8a4b0f}
+  .tag.consumable{background:#e8eef7; color:#2f4f7f}
+  .tag.raw{background:var(--teal-wash); color:var(--teal-ink)}
+  .tag.off{background:#f1f1f1; color:var(--faint)}
+  .new-row td{animation:flash 1.6s ease-out}
+  @keyframes flash{from{background:#dff1ee}to{background:transparent}}
+  @media (prefers-reduced-motion:reduce){.new-row td{animation:none}}
+  .state{padding:40px 24px; text-align:center; color:var(--muted)}
+  .state h3{margin:0 0 6px; color:var(--ink); font-size:15px}
+  .state p{margin:0 auto 14px; max-width:420px}
+  .skel td div{height:12px; border-radius:4px; background:linear-gradient(90deg,#eef0f1 0%,#f6f7f8 50%,#eef0f1 100%); background-size:200% 100%; animation:sh 1.2s infinite linear}
+  @keyframes sh{to{background-position:-200% 0}}
+  @media (prefers-reduced-motion:reduce){.skel td div{animation:none}}
+
+  /* form */
+  .form-panel{position:sticky; top:20px}
+  form{padding:4px 16px 16px}
+  fieldset{border:0; margin:0; padding:14px 0 6px; border-bottom:1px solid var(--line-2)}
+  fieldset:last-of-type{border-bottom:0}
+  legend{float:left; width:100%; font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; padding:0; margin-bottom:10px}
+  legend + *{clear:both}
+  .row{display:grid; grid-template-columns:1fr 1fr; gap:10px 12px}
+  .row.three{grid-template-columns:1fr 1fr 1fr}
+  .f{display:flex; flex-direction:column; gap:4px; min-width:0; margin-bottom:10px}
+  .f.full{grid-column:1/-1}
+  label{font-size:12.5px; font-weight:500; color:#2b3644}
+  label .opt{color:var(--faint); font-weight:400}
+  .in{height:34px; border:1px solid var(--line); border-radius:var(--r-sm); padding:0 10px; background:#fff; width:100%; min-width:0}
+  .in:hover{border-color:#c9cfd4}
+  .in[aria-invalid="true"]{border-color:var(--danger); background:#fffafa}
+  .hint{font-size:12px; color:var(--faint)}
+  .err{font-size:12px; color:var(--danger)}
+  .seg{display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--line); border-radius:var(--r-sm); overflow:hidden}
+  .seg label{display:flex; align-items:center; justify-content:center; height:32px; cursor:pointer; font-weight:500; color:var(--muted); border-right:1px solid var(--line); font-size:12.5px}
+  .seg label:last-child{border-right:0}
+  .seg input{position:absolute; opacity:0; pointer-events:none}
+  .seg input:checked + span{color:var(--teal-ink)}
+  .seg label:has(input:checked){background:var(--teal-wash)}
+  .seg label:has(input:focus-visible){outline:2px solid var(--teal); outline-offset:-2px}
+  .check{display:flex; align-items:center; gap:8px; font-size:13px; margin:2px 0 10px}
+  .check input{width:16px; height:16px; accent-color:var(--teal)}
+
+  /* pack sizes + unit ladder */
+  .packs{display:flex; flex-direction:column; gap:8px; margin-bottom:8px}
+  .pack{display:grid; grid-template-columns:minmax(0,1.3fr) 76px 82px 30px; gap:6px; align-items:center}
+  .icon-btn{width:30px; height:30px; border:1px solid transparent; background:transparent; border-radius:var(--r-sm); cursor:pointer; color:var(--faint); display:grid; place-items:center}
+  .icon-btn:hover{background:var(--danger-wash); color:var(--danger)}
+  .link-btn{background:none; border:0; padding:4px 0; color:var(--teal-ink); font-weight:600; cursor:pointer}
+  .ladder{margin:4px 0 10px; border-left:3px solid var(--teal); background:#f7fbfa; padding:8px 12px; border-radius:0 var(--r-sm) var(--r-sm) 0; font-size:12.5px; color:#33505a}
+  .ladder ol{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:3px}
+  .ladder b{color:var(--ink); font-weight:600}
+  .ladder .arrow{color:var(--faint); padding:0 4px}
+
+  .actions{display:flex; gap:8px; align-items:center; padding-top:14px}
+  .btn{height:36px; padding:0 16px; border-radius:var(--r-sm); border:1px solid var(--line); background:#fff; cursor:pointer; font-weight:600}
+  .btn.primary{background:var(--teal); border-color:var(--teal); color:#fff}
+  .btn.primary:hover{background:var(--teal-ink)}
+  .btn:disabled{opacity:.6; cursor:progress}
+  .kbd{font-size:11.5px; color:var(--faint); margin-left:auto}
+
+  .banner{margin:12px 16px 0; padding:10px 12px; border-radius:var(--r-sm); font-size:13px; display:flex; gap:10px; align-items:flex-start}
+  .banner.info{background:var(--warn-wash); color:var(--warn)}
+  .banner.error{background:var(--danger-wash); color:var(--danger)}
+  .banner.ok{background:var(--ok-wash); color:var(--ok)}
+  .banner b{font-weight:600}
+  details.payload{margin:10px 16px 16px; font-size:12.5px}
+  details.payload summary{cursor:pointer; color:var(--muted)}
+  details.payload pre{background:#0f1b2c; color:#d7e3f1; padding:10px 12px; border-radius:var(--r-sm); overflow:auto; font:12px/1.5 var(--mono); max-height:260px}
+
+  /* sign-in dialog */
+  dialog{border:0; border-radius:var(--r); padding:0; width:min(380px, calc(100vw - 32px)); box-shadow:0 20px 50px rgba(19,36,61,.25)}
+  dialog::backdrop{background:rgba(19,36,61,.45)}
+  dialog form{padding:18px}
+  dialog h2{margin:0 0 4px; font-size:16px}
+  dialog p{margin:0 0 14px; color:var(--muted); font-size:13px}
+
+  .toast{position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--navy); color:#fff; padding:10px 14px; border-radius:var(--r-sm); font-size:13px; display:none; gap:12px; align-items:center; box-shadow:0 8px 24px rgba(0,0,0,.18); z-index:5; max-width:calc(100vw - 32px)}
+  .toast.show{display:flex}
+  .toast button{background:none; border:0; color:#8fe0d6; font-weight:600; cursor:pointer}
+  .sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+
+  @media (max-width:980px){
+    .wrap{grid-template-columns:minmax(0,1fr); padding:12px; gap:12px}
+    .form-panel{position:static; order:-1}
+    .crumb{display:none}
+  }
+  @media (max-width:560px){
+    .bar{padding:0 12px; gap:10px}
+    .conn span.txt{display:none}
+    .col-cat,.col-base{display:none}
+    th,td{padding-left:12px; padding-right:12px}
+    .row.three{grid-template-columns:1fr 1fr}
+    .kbd{display:none}
+  }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><span class="mark" aria-hidden="true">P</span>Pick your inventory</div>
+  <div class="crumb">Inventory masters › <b>Items</b> · <span id="orgName">Demo restaurant</span></div>
+  <div class="spacer"></div>
+  <div class="conn" role="status" aria-live="polite"><span class="dot" id="connDot"></span><span class="txt" id="connTxt">Demo mode · not saved to Supabase</span></div>
+  <button class="btn-bar" id="authBtn" type="button">Sign in</button>
+</header>
+
+<main class="wrap">
+  <!-- Item list -->
+  <section class="panel" aria-labelledby="listTitle">
+    <div class="panel-h">
+      <h1 id="listTitle">Items</h1>
+      <span class="count num" id="countTxt"></span>
+    </div>
+    <div class="tools">
+      <label class="sr" for="q">Search items</label>
+      <input id="q" class="search" type="search" placeholder="Search by name or code" autocomplete="off">
+      <div class="chips" role="group" aria-label="Filter by item type" id="chips">
+        <button class="chip" type="button" data-type="" aria-pressed="true">All</button>
+        <button class="chip" type="button" data-type="raw" aria-pressed="false">Raw</button>
+        <button class="chip" type="button" data-type="prep" aria-pressed="false">Prep</button>
+        <button class="chip" type="button" data-type="packaging" aria-pressed="false">Packaging</button>
+        <button class="chip" type="button" data-type="consumable" aria-pressed="false">Consumable</button>
+      </div>
+    </div>
+    <div id="listBody" aria-live="polite"></div>
+  </section>
+
+  <!-- New item form -->
+  <section class="panel form-panel" aria-labelledby="formTitle">
+    <div class="panel-h"><h2 id="formTitle">New item</h2></div>
+    <div id="formBanner"></div>
+    <form id="itemForm" novalidate>
+      <fieldset>
+        <legend>Basics</legend>
+        <div class="f">
+          <label for="name">Name</label>
+          <input class="in" id="name" name="name" maxlength="120" required autocomplete="off" placeholder="e.g. Tomato">
+          <span class="err" id="name-err" hidden></span>
+        </div>
+        <div class="row">
+          <div class="f">
+            <label for="code">Code <span class="opt">optional</span></label>
+            <input class="in" id="code" name="code" maxlength="20" autocomplete="off" placeholder="VEG-TOM" style="font-family:var(--mono)">
+            <span class="err" id="code-err" hidden></span>
+          </div>
+          <div class="f">
+            <label for="category">Category <span class="opt">optional</span></label>
+            <select class="in" id="category" name="category"></select>
+          </div>
+        </div>
+        <div class="f">
+          <span id="typeLbl" style="font-size:12.5px;font-weight:500;color:#2b3644">Type</span>
+          <div class="seg" role="radiogroup" aria-labelledby="typeLbl">
+            <label><input type="radio" name="item_type" value="raw" checked><span>Raw</span></label>
+            <label><input type="radio" name="item_type" value="prep"><span>Prep</span></label>
+            <label><input type="radio" name="item_type" value="packaging"><span>Packaging</span></label>
+            <label><input type="radio" name="item_type" value="consumable"><span>Consumable</span></label>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Units and packs</legend>
+        <div class="row">
+          <div class="f">
+            <label for="base_unit">Stock held in</label>
+            <select class="in" id="base_unit" name="base_unit">
+              <option value="g">Grams (g)</option>
+              <option value="ml">Millilitres (ml)</option>
+              <option value="pcs">Pieces (pcs)</option>
+            </select>
+            <span class="hint">Can't change once the item has stock.</span>
+          </div>
+          <div class="f">
+            <label for="yield">Usable yield %</label>
+            <input class="in num" id="yield" name="default_yield_pct" type="number" inputmode="decimal" min="0.01" max="100" step="0.01" value="100">
+            <span class="err" id="yield-err" hidden></span>
+          </div>
+        </div>
+
+        <div class="f full" style="margin-bottom:4px">
+          <span style="font-size:12.5px;font-weight:500;color:#2b3644">How vendors sell it <span class="opt" style="color:var(--faint);font-weight:400">pack sizes</span></span>
+        </div>
+        <div class="packs" id="packs"></div>
+        <button type="button" class="link-btn" id="addPack">+ Add pack size</button>
+        <div class="ladder" id="ladder" aria-live="polite"></div>
+
+        <div class="row">
+          <div class="f">
+            <label for="alt_unit">Also measured in <span class="opt">optional</span></label>
+            <select class="in" id="alt_unit" name="alt_unit"></select>
+          </div>
+          <div class="f">
+            <label for="alt_per_base" id="altLbl">Amount per 1 g</label>
+            <input class="in num" id="alt_per_base" name="alt_per_base" type="number" inputmode="decimal" min="0" step="any" disabled placeholder="e.g. 50">
+            <span class="err" id="alt-err" hidden></span>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Tax and shelf life</legend>
+        <div class="row three">
+          <div class="f">
+            <label for="hsn">HSN code <span class="opt">opt.</span></label>
+            <input class="in num" id="hsn" name="hsn_code" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="0702">
+            <span class="err" id="hsn-err" hidden></span>
+          </div>
+          <div class="f">
+            <label for="gst">GST % <span class="opt">opt.</span></label>
+            <input class="in num" id="gst" name="gst_rate" type="number" inputmode="decimal" min="0" max="100" step="0.01" placeholder="5">
+            <span class="err" id="gst-err" hidden></span>
+          </div>
+          <div class="f">
+            <label for="shelf">Shelf life (days) <span class="opt">opt.</span></label>
+            <input class="in num" id="shelf" name="shelf_life_days" type="number" inputmode="numeric" min="1" step="1" placeholder="5">
+            <span class="err" id="shelf-err" hidden></span>
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" id="track_expiry" name="track_expiry"> Track expiry dates for this item</label>
+      </fieldset>
+
+      <div class="actions">
+        <button class="btn primary" type="submit" id="saveBtn">Save item</button>
+        <button class="btn" type="reset" id="resetBtn">Clear</button>
+        <span class="kbd">Ctrl + Enter to save</span>
+      </div>
+    </form>
+    <details class="payload" id="payloadBox" hidden>
+      <summary>Row sent to <code>public.items</code></summary>
+      <pre id="payloadPre"></pre>
+    </details>
+  </section>
+</main>
+
+<dialog id="authDlg" aria-labelledby="authTitle">
+  <form id="authForm" method="dialog" novalidate>
+    <h2 id="authTitle">Sign in to Supabase</h2>
+    <p>Items you save will be written to your organisation's item master.</p>
+    <div class="f"><label for="email">Email</label><input class="in" id="email" type="email" autocomplete="username" required></div>
+    <div class="f"><label for="pw">Password</label><input class="in" id="pw" type="password" autocomplete="current-password" required></div>
+    <div class="err" id="authErr" hidden style="margin-bottom:10px"></div>
+    <div class="actions" style="padding-top:4px">
+      <button class="btn primary" type="submit" id="authGo">Sign in</button>
+      <button class="btn" type="button" id="authCancel">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toastTxt"></span><button type="button" id="toastBtn">Add another</button></div>
+
+<script type="module">
+/* ---- Supabase project (publishable key: safe for browsers, RLS decides access) ---- */
+const SUPABASE_URL = 'https://ngfakbdneyluggrhijyq.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_HruaUuku9f7uM2d3D5uX_A_t5lTGMpx';
+
+/* ---- Mirrors public.units and private.default_item_categories ---- */
+const UNITS = [
+  {code:'g',name:'g',dim:'mass',base:'g',f:1},{code:'kg',name:'kg',dim:'mass',base:'g',f:1000},
+  {code:'ml',name:'ml',dim:'volume',base:'ml',f:1},{code:'l',name:'l',dim:'volume',base:'ml',f:1000},
+  {code:'pcs',name:'pcs',dim:'count',base:'pcs',f:1},{code:'dozen',name:'dozen',dim:'count',base:'pcs',f:12},
+];
+const DEFAULT_CATEGORIES = ['Vegetables','Fruits','Meat and seafood','Dairy','Dry store','Spices','Oils','Beverages','Packaging','Cleaning','Prep items']
+  .map((name,i)=>({id:'demo-cat-'+i, name}));
+const TYPE_LABEL = {raw:'Raw',prep:'Prep',packaging:'Packaging',consumable:'Consumable'};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Number(n).toLocaleString('en-IN', {maximumFractionDigits:3});
+
+const S = {
+  mode:'demo', sb:null, user:null, org:null, canEdit:true,
+  categories: DEFAULT_CATEGORIES,
+  items: [
+    {id:'d1', code:'VEG-TOM', name:'Tomato', category_id:'demo-cat-0', item_type:'raw', base_unit:'g', is_active:true, packs:1},
+    {id:'d2', code:'DAI-PAN', name:'Paneer', category_id:'demo-cat-3', item_type:'raw', base_unit:'g', is_active:true, packs:1},
+    {id:'d3', code:'OIL-SUN', name:'Sunflower oil', category_id:'demo-cat-6', item_type:'raw', base_unit:'ml', is_active:true, packs:2},
+    {id:'d4', code:'DAI-EGG', name:'Eggs', category_id:'demo-cat-3', item_type:'raw', base_unit:'pcs', is_active:true, packs:1},
+    {id:'d5', code:'PRP-GRV', name:'Makhani gravy base', category_id:'demo-cat-10', item_type:'prep', base_unit:'g', is_active:true, packs:0},
+    {id:'d6', code:'PKG-500', name:'Takeaway container 500 ml', category_id:'demo-cat-8', item_type:'packaging', base_unit:'pcs', is_active:true, packs:1},
+  ],
+  listState:'ready', listError:'', filterType:'', q:'', lastNewId:null,
+};
+
+/* ---------------- list ---------------- */
+function catName(id){ return S.categories.find(c=>c.id===id)?.name ?? '—'; }
+
+function renderList(){
+  const body = $('#listBody');
+  if (S.listState === 'loading'){
+    $('#countTxt').textContent = 'Loading…';
+    body.innerHTML = tableShell([1,2,3,4,5].map(()=>`<tr class="skel">${'<td><div></div></td>'.repeat(6)}</tr>`).join(''));
+    return;
+  }
+  if (S.listState === 'error'){
+    $('#countTxt').textContent = '';
+    body.innerHTML = `<div class="state"><h3>Couldn't load items</h3><p>${esc(S.listError)}</p><button class="btn" type="button" id="retry">Try again</button></div>`;
+    $('#retry').onclick = loadLive;
+    return;
+  }
+  if (S.listState === 'permission'){
+    $('#countTxt').textContent = '';
+    body.innerHTML = `<div class="state"><h3>No organisation for this account</h3><p>${esc(S.listError)}</p><button class="btn" type="button" id="toDemo">Use demo mode</button></div>`;
+    $('#toDemo').onclick = signOut;
+    return;
+  }
+  const q = S.q.trim().toLowerCase();
+  const rows = S.items.filter(i => (!S.filterType || i.item_type===S.filterType) &&
+    (!q || i.name.toLowerCase().includes(q) || (i.code||'').toLowerCase().includes(q)));
+  $('#countTxt').textContent = S.items.length ? `${rows.length === S.items.length ? '' : rows.length + ' of '}${S.items.length} item${S.items.length===1?'':'s'}` : '';
+  if (!S.items.length){
+    body.innerHTML = `<div class="state"><h3>No items yet</h3><p>Add the first thing this restaurant buys. Most kitchens have 200 to 500 items.</p><button class="btn primary" type="button" id="focusName">Add an item</button></div>`;
+    $('#focusName').onclick = () => $('#name').focus();
+    return;
+  }
+  if (!rows.length){
+    body.innerHTML = `<div class="state"><h3>No matches</h3><p>Nothing matches “${esc(S.q)}”${S.filterType ? ' in ' + TYPE_LABEL[S.filterType] : ''}.</p><button class="btn" type="button" id="clearF">Clear filters</button></div>`;
+    $('#clearF').onclick = () => { S.q=''; $('#q').value=''; setType(''); };
+    return;
+  }
+  body.innerHTML = tableShell(rows.map(i => `
+    <tr class="${i.id===S.lastNewId?'new-row':''}">
+      <td class="code">${esc(i.code || '—')}</td>
+      <td class="name">${esc(i.name)}</td>
+      <td class="col-cat">${esc(catName(i.category_id))}</td>
+      <td><span class="tag ${i.item_type}">${TYPE_LABEL[i.item_type]}</span></td>
+      <td class="col-base num">${esc(i.base_unit)}${i.packs ? ` <span class="hint">· ${i.packs} pack${i.packs>1?'s':''}</span>` : ''}</td>
+      <td>${i.is_active ? '<span class="tag">Active</span>' : '<span class="tag off">Inactive</span>'}</td>
+    </tr>`).join(''));
+}
+function tableShell(tbody){
+  return `<div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Name</th><th class="col-cat">Category</th><th>Type</th><th class="col-base">Stock unit</th><th>Status</th></tr></thead><tbody>${tbody}</tbody></table></div>`;
+}
+function setType(t){
+  S.filterType = t;
+  document.querySelectorAll('#chips .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.type===t)));
+  renderList();
+}
+$('#chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) setType(b.dataset.type); });
+$('#q').addEventListener('input', e => { S.q = e.target.value; renderList(); });
+
+/* ---------------- form: categories, units, packs ---------------- */
+function renderCategories(){
+  $('#category').innerHTML = '<option value="">No category</option>' +
+    S.categories.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+}
+const baseUnit = () => $('#base_unit').value;
+const dimOf = code => UNITS.find(u=>u.code===code).dim;
+
+function renderAltUnits(){
+  const b = baseUnit(), cur = $('#alt_unit').value;
+  const opts = ['g','ml','pcs'].filter(u => u !== b);
+  $('#alt_unit').innerHTML = '<option value="">None</option>' + opts.map(u => `<option value="${u}">${u}</option>`).join('');
+  if (opts.includes(cur)) $('#alt_unit').value = cur;
+  syncAlt();
+}
+function syncAlt(){
+  const a = $('#alt_unit').value, inp = $('#alt_per_base');
+  inp.disabled = !a;
+  if (!a) inp.value = '';
+  $('#altLbl').textContent = a ? `${a} per 1 ${baseUnit()}` : `Amount per 1 ${baseUnit()}`;
+}
+
+let packSeq = 0;
+function packRow(p = {}){
+  const id = 'p' + (++packSeq), b = baseUnit();
+  const units = UNITS.filter(u => u.dim === dimOf(b));
+  const el = document.createElement('div');
+  el.className = 'pack'; el.dataset.id = id;
+  el.innerHTML = `
+    <input class="in" aria-label="Pack name" placeholder="Crate, tray, tin…" value="${esc(p.name||'')}" data-k="name" maxlength="60">
+    <input class="in num" aria-label="Quantity in pack" type="number" inputmode="decimal" min="0" step="any" placeholder="12" value="${esc(p.qty??'')}" data-k="qty">
+    <select class="in" aria-label="Pack unit" data-k="unit">${units.map(u=>`<option value="${u.code}" ${u.code===(p.unit||units[units.length-1].code)?'selected':''}>${u.name}</option>`).join('')}</select>
+    <button type="button" class="icon-btn" aria-label="Remove pack size" data-k="rm">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>`;
+  return el;
+}
+function readPacks(){
+  return [...document.querySelectorAll('#packs .pack')].map(el => {
+    const name = el.querySelector('[data-k=name]').value.trim();
+    const qty = parseFloat(el.querySelector('[data-k=qty]').value);
+    const unit = el.querySelector('[data-k=unit]').value;
+    const u = UNITS.find(x=>x.code===unit);
+    return {el, name, qty, unit, inBase: (qty>0 && u) ? qty*u.f : null};
+  });
+}
+function renderLadder(){
+  const b = baseUnit(), packs = readPacks().filter(p => p.name && p.inBase);
+  const yieldPct = parseFloat($('#yield').value) || 100;
+  const name = $('#name').value.trim() || 'this item';
+  const lines = packs.map(p => `<li><b>1 ${esc(p.name)}</b><span class="arrow">=</span>${fmt(p.qty)} ${p.unit}${p.unit!==b ? `<span class="arrow">=</span><b class="num">${fmt(p.inBase)} ${b}</b>` : ''} in stock</li>`);
+  if (packs[0]){
+    const p = packs[0], two = p.inBase*2;
+    lines.push(`<li>Receiving 2 ${esc(p.name)}s adds <b class="num">${fmt(two)} ${b}</b> to stock</li>`);
+  }
+  if (yieldPct < 100){
+    const use = b==='pcs' ? 1 : 100;
+    lines.push(`<li>A recipe needing ${use} ${b} usable deducts <b class="num">${fmt(use*100/yieldPct)} ${b}</b> (${fmt(yieldPct)}% yield)</li>`);
+  }
+  $('#ladder').innerHTML = lines.length
+    ? `<ol>${lines.join('')}</ol>`
+    : `<span>Stock for ${esc(name)} is held in <b>${b}</b>. Add a pack size to see how a vendor's pack converts.</span>`;
+}
+$('#addPack').onclick = () => { const r = packRow(); $('#packs').append(r); r.querySelector('input').focus(); renderLadder(); };
+$('#packs').addEventListener('click', e => { if (e.target.closest('[data-k=rm]')) { e.target.closest('.pack').remove(); renderLadder(); } });
+$('#packs').addEventListener('input', renderLadder);
+$('#base_unit').addEventListener('change', () => {
+  const kept = readPacks().map(p => ({name:p.name, qty:isNaN(p.qty)?'':p.qty}));
+  $('#packs').innerHTML = ''; kept.forEach(p => $('#packs').append(packRow(p)));
+  renderAltUnits(); renderLadder();
+});
+$('#alt_unit').addEventListener('change', syncAlt);
+['#yield','#name'].forEach(s => $(s).addEventListener('input', renderLadder));
+
+/* ---------------- validation: mirrors the CHECK constraints on public.items ---------------- */
+function setErr(id, msg){
+  const e = $('#'+id+'-err'), i = { 'name':'#name','code':'#code','yield':'#yield','alt':'#alt_per_base','hsn':'#hsn','gst':'#gst','shelf':'#shelf' }[id];
+  if (e){ e.hidden = !msg; e.textContent = msg || ''; }
+  if (i){ $(i).setAttribute('aria-invalid', msg ? 'true' : 'false'); if (msg) $(i).setAttribute('aria-describedby', id+'-err'); }
+  return !msg;
+}
+function validate(){
+  const v = {
+    name: $('#name').value.trim(),
+    code: $('#code').value.trim(),
+    yield: $('#yield').value,
+    alt: $('#alt_per_base').value,
+    hsn: $('#hsn').value.trim(),
+    gst: $('#gst').value,
+    shelf: $('#shelf').value,
+  };
+  let ok = true, first = null;
+  const chk = (id, msg, sel) => { if (!setErr(id, msg)) { ok = false; first ??= sel; } };
+  chk('name', !v.name ? 'Give the item a name.' : v.name.length>120 ? 'Keep the name under 120 characters.' : '', '#name');
+  const dupe = v.code && S.items.some(i => (i.code||'').toLowerCase() === v.code.toLowerCase());
+  chk('code', v.code && !/^[A-Za-z0-9_-]{1,20}$/.test(v.code) ? 'Use letters, numbers, - or _ (up to 20).' : dupe ? 'Another item already uses this code.' : '', '#code');
+  const y = parseFloat(v.yield);
+  chk('yield', !(y>0 && y<=100) ? 'Enter a yield above 0 and up to 100.' : '', '#yield');
+  const altU = $('#alt_unit').value;
+  chk('alt', altU && !(parseFloat(v.alt)>0) ? `Enter how many ${altU} make 1 ${baseUnit()}.` : '', '#alt_per_base');
+  chk('hsn', v.hsn && !/^[0-9]{4,8}$/.test(v.hsn) ? 'HSN codes are 4 to 8 digits.' : '', '#hsn');
+  const g = parseFloat(v.gst);
+  chk('gst', v.gst !== '' && !(g>=0 && g<=100) ? 'GST must be between 0 and 100.' : '', '#gst');
+  const sh = Number(v.shelf);
+  chk('shelf', v.shelf !== '' && !(Number.isInteger(sh) && sh>0) ? 'Whole days, 1 or more.' : '', '#shelf');
+
+  const packs = readPacks();
+  packs.forEach(p => {
+    const bad = (p.name || !isNaN(p.qty)) && !(p.name && p.inBase>0);
+    p.el.querySelectorAll('input').forEach(i => i.setAttribute('aria-invalid', bad ? 'true':'false'));
+    if (bad){ ok = false; first ??= p.el.querySelector(p.name ? '[data-k=qty]' : '[data-k=name]'); }
+  });
+  if (first) (typeof first === 'string' ? $(first) : first).focus();
+  return ok ? v : null;
+}
+
+function buildRow(v){
+  const altU = $('#alt_unit').value || null;
+  return {
+    organisation_id: S.org?.id ?? '(your organisation id)',
+    category_id: $('#category').value || null,
+    code: v.code || null,
+    name: v.name,
+    item_type: document.querySelector('input[name=item_type]:checked').value,
+    base_unit: baseUnit(),
+    alt_unit: altU,
+    alt_per_base: altU ? Number(v.alt) : null,
+    default_yield_pct: Number(v.yield),
+    shelf_life_days: v.shelf === '' ? null : Number(v.shelf),
+    track_expiry: $('#track_expiry').checked,
+    hsn_code: v.hsn || null,
+    gst_rate: v.gst === '' ? null : Number(v.gst),
+    is_active: true,
+  };
+}
+
+/* ---------------- save ---------------- */
+function banner(kind, html){ $('#formBanner').innerHTML = html ? `<div class="banner ${kind}" role="${kind==='error'?'alert':'status'}">${html}</div>` : ''; }
+
+function pgMessage(err){
+  const c = err?.code;
+  if (c === '23505') return 'An item with this code already exists in your organisation.';
+  if (c === '42501') return "Your role can't add items. Ask an owner or manager for the “masters.edit” permission.";
+  if (c === '23514') return 'One of the values breaks a database rule: ' + (err.message || '');
+  if (c === '23503') return 'The category or unit you picked no longer exists. Reload and try again.';
+  return err?.message || 'Something went wrong while saving.';
+}
+
+$('#itemForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  banner('', '');
+  const v = validate(); if (!v) return;
+  if (S.mode === 'live' && !S.canEdit){ banner('error', pgMessage({code:'42501'})); return; }
+  const row = buildRow(v);
+  const packs = readPacks().filter(p => p.name && p.inBase>0).map(p => ({name:p.name, quantity_in_base:p.inBase}));
+  $('#payloadPre').textContent = JSON.stringify(packs.length ? {...row, '→ item_pack_sizes': packs} : row, null, 2);
+  $('#payloadBox').hidden = false;
+
+  const btn = $('#saveBtn'); btn.disabled = true; btn.textContent = 'Saving…';
+  try{
+    if (S.mode === 'demo'){
+      await new Promise(r => setTimeout(r, 250));
+      const id = 'd' + Date.now();
+      S.items.unshift({id, code:row.code, name:row.name, category_id:row.category_id, item_type:row.item_type, base_unit:row.base_unit, is_active:true, packs:packs.length});
+      done(id, `${row.name} added (demo, not saved to Supabase)`);
+    } else {
+      const { data, error } = await S.sb.from('items').insert(row).select('id').single();
+      if (error) throw error;
+      let packNote = '';
+      if (packs.length){
+        const { error: pErr } = await S.sb.from('item_pack_sizes').insert(packs.map(p => ({...p, item_id:data.id, organisation_id:S.org.id})));
+        if (pErr) packNote = pErr;
+      }
+      S.items.unshift({id:data.id, code:row.code, name:row.name, category_id:row.category_id, item_type:row.item_type, base_unit:row.base_unit, is_active:true, packs: packNote ? 0 : packs.length});
+      if (packNote){
+        renderList();
+        banner('info', `<span><b>${esc(row.name)} was saved, but its pack sizes weren't.</b> ${esc(pgMessage(packNote))} Add them again from the item.</span>`);
+      } else done(data.id, `${row.name} saved to the item master`);
+    }
+  } catch(err){
+    banner('error', `<span><b>Not saved.</b> ${esc(pgMessage(err))}</span>`);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save item';
+  }
+});
+function done(id, msg){
+  S.lastNewId = id; renderList();
+  toast(msg);
+  resetForm(true);
+}
+function resetForm(keepUnits){
+  const keepBase = baseUnit(), keepCat = $('#category').value;
+  $('#itemForm').reset();
+  if (keepUnits){ $('#base_unit').value = keepBase; $('#category').value = keepCat; }
+  ['name','code','yield','alt','hsn','gst','shelf'].forEach(id => setErr(id, ''));
+  $('#packs').innerHTML = ''; $('#packs').append(packRow());
+  renderAltUnits(); renderLadder();
+}
+$('#itemForm').addEventListener('reset', e => { e.preventDefault(); resetForm(false); banner('',''); $('#payloadBox').hidden = true; });
+document.addEventListener('keydown', e => { if ((e.ctrlKey||e.metaKey) && e.key === 'Enter' && document.activeElement?.closest('#itemForm')) $('#itemForm').requestSubmit(); });
+
+let toastT;
+function toast(msg){
+  $('#toastTxt').textContent = msg; $('#toast').classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => $('#toast').classList.remove('show'), 4500);
+}
+$('#toastBtn').onclick = () => { $('#toast').classList.remove('show'); $('#name').focus(); };
+
+/* ---------------- Supabase: sign in, load org, categories, items ---------------- */
+async function client(){
+  if (S.sb) return S.sb;
+  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+  S.sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+  return S.sb;
+}
+function setConn(){
+  const live = S.mode === 'live';
+  $('#connDot').classList.toggle('live', live);
+  $('#connTxt').textContent = live ? `Live · ${S.user?.email ?? ''}` : 'Demo mode · not saved to Supabase';
+  $('#authBtn').textContent = live ? 'Sign out' : 'Sign in';
+  $('#orgName').textContent = S.org?.name ?? (live ? '—' : 'Demo restaurant');
+}
+$('#authBtn').onclick = () => S.mode === 'live' ? signOut() : ($('#authErr').hidden = true, $('#authDlg').showModal());
+$('#authCancel').onclick = () => $('#authDlg').close();
+$('#authForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const go = $('#authGo'); go.disabled = true; go.textContent = 'Signing in…';
+  try{
+    const sb = await client();
+    const { data, error } = await sb.auth.signInWithPassword({ email: $('#email').value.trim(), password: $('#pw').value });
+    if (error) throw error;
+    S.user = data.user; S.mode = 'live';
+    $('#authDlg').close();
+    await loadLive();
+  } catch(err){
+    $('#authErr').hidden = false;
+    $('#authErr').textContent = err?.message?.includes('fetch') ? "Couldn't reach Supabase. Check your connection." : (err?.message || 'Sign-in failed.');
+  } finally { go.disabled = false; go.textContent = 'Sign in'; }
+});
+async function signOut(){
+  if (S.sb) await S.sb.auth.signOut().catch(()=>{});
+  location.reload();
+}
+async function loadLive(){
+  S.listState = 'loading'; renderList(); setConn();
+  try{
+    const sb = S.sb;
+    const { data: mem, error: mErr } = await sb.from('memberships').select('organisation_id, role_id').eq('user_id', S.user.id);
+    if (mErr) throw mErr;
+    if (!mem?.length){
+      S.org = null; S.canEdit = false; S.listState = 'permission';
+      S.listError = 'This account isn’t a member of any organisation yet, so there is no item master to add to. An owner needs to invite you first.';
+      setConn(); renderList(); banner('info', '<span><b>Read-only.</b> You need to belong to an organisation before you can add items.</span>');
+      return;
+    }
+    const orgId = mem[0].organisation_id;
+    const [{ data: org }, { data: cats, error: cErr }, { data: items, error: iErr }, { data: canEdit }] = await Promise.all([
+      sb.from('organisations').select('id, name').eq('id', orgId).single(),
+      sb.from('item_categories').select('id, name').eq('organisation_id', orgId).eq('is_active', true).order('sort_order'),
+      sb.from('items').select('id, code, name, category_id, item_type, base_unit, is_active').eq('organisation_id', orgId).order('name'),
+      sb.schema('private').rpc('has_permission', { p_organisation_id: orgId, p_permission: 'masters.edit' }).then(r => r, () => ({ data: null })),
+    ]);
+    if (cErr) throw cErr; if (iErr) throw iErr;
+    S.org = org ?? { id: orgId, name: 'Your organisation' };
+    S.categories = cats ?? [];
+    S.canEdit = canEdit !== false;   // if the check can't run, let the database decide on save
+    const ids = (items ?? []).map(i => i.id);
+    let packCount = {};
+    if (ids.length){
+      const { data: ps } = await sb.from('item_pack_sizes').select('item_id').in('item_id', ids).eq('is_active', true);
+      (ps ?? []).forEach(p => packCount[p.item_id] = (packCount[p.item_id] || 0) + 1);
+    }
+    S.items = (items ?? []).map(i => ({ ...i, packs: packCount[i.id] || 0 }));
+    S.listState = 'ready';
+    renderCategories(); setConn(); renderList();
+    banner(S.canEdit ? '' : 'info', S.canEdit ? '' : '<span><b>View only.</b> Your role can see items but not add them.</span>');
+  } catch(err){
+    S.listState = 'error'; S.listError = pgMessage(err); renderList();
+  }
+}
+
+/* ---------------- boot ---------------- */
+const preview = new URLSearchParams(location.search).get('state');   // ?state=loading|empty|error|permission (design review)
+renderCategories();
+$('#packs').append(packRow({name:'', qty:''}));
+renderAltUnits(); renderLadder();
+if (preview === 'loading') S.listState = 'loading';
+if (preview === 'empty') S.items = [];
+if (preview === 'error'){ S.listState = 'error'; S.listError = "Supabase didn't respond. Check your connection and try again."; }
+if (preview === 'permission'){ S.listState = 'permission'; S.listError = 'This account isn’t a member of any organisation yet, so there is no item master to add to. An owner needs to invite you first.'; }
+if (preview === 'ladder'){
+  $('#name').value = 'Tomato'; $('#code').value = 'VEG-TOM'; $('#category').value = 'demo-cat-0'; $('#yield').value = '92';
+  const p = $('#packs .pack'); p.querySelector('[data-k=name]').value = 'Crate'; p.querySelector('[data-k=qty]').value = '12'; p.querySelector('[data-k=unit]').value = 'kg';
+  $('#hsn').value = '0702'; $('#shelf').value = '5';
+  renderLadder();
+}
+renderList(); setConn();
+</script>
+</body>
+</html>

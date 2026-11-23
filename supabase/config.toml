@@ -33,5 +33,9 @@ jwt_expiry = 3600
 enable_signup = true
 
 [auth.email]
-enable_signup = true
+enabled = true
 enable_confirmations = true
+
+# The new API keys are not JWTs, so this function checks the caller itself.
+[functions.create-staff-user]
+verify_jwt = false
