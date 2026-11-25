@@ -79,5 +79,5 @@ jobs:
             name=$(basename "$dir")
             [ "${name#_}" != "$name" ] && continue   # skip shared folders such as _shared
             echo "Deploying $name"
-            supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+            supabase functions deploy "$name" --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt --yes
           done
