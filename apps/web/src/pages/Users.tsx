@@ -78,6 +78,10 @@ function AddStaff({ roles, onClose, onSaved }: { roles: Role[]; onClose: () => v
       body: { organisation_id: orgId, username: username.trim().toLowerCase(), password, full_name: fullName.trim(), role_id: roleId, all_outlets: all, outlet_ids: ids },
     });
     if (err) {
+      // No reply at all: the function isn't deployed, or the network is down.
+      if (/Failed to send a request/i.test(err.message)) {
+        throw new Error('Couldn’t reach the staff login service. Check your connection; if it keeps happening, the service may not be set up yet.');
+      }
       // The function replies with { error } and a 4xx status; show its message.
       const ctx = (err as { context?: Response }).context;
       let message = err.message;
