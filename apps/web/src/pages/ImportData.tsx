@@ -16,14 +16,14 @@ const templates: Record<Kind, { title: string; columns: string[]; example: strin
   items: {
     title: 'Items',
     columns: ['name', 'code', 'category', 'type', 'stock_unit', 'pack_name', 'pack_qty', 'pack_unit', 'yield_pct', 'shelf_life_days', 'hsn_code', 'gst_rate'],
-    example: ['Tomato', 'VEG-TOM', 'Vegetables', 'raw', 'g', 'Crate', '12', 'kg', '95', '5', '0702', '0'],
-    help: 'stock_unit is g, ml or pcs (kg and l are read as g and ml). type is raw, prep, packaging or consumable. New categories are created. Items whose name already exists are skipped.',
+    example: ['Tomato', 'VEG-TOM', 'Vegetables', 'raw', 'kg', 'Crate', '12', 'kg', '95', '5', '0702', '0'],
+    help: 'stock_unit is kg, g, l, ml, pcs or dozen. type is raw, prep, packaging or consumable. New categories are created. Items whose name already exists are skipped.',
   },
   vendors: {
     title: 'Vendors',
-    columns: ['name', 'code', 'contact_person', 'phone', 'whatsapp', 'email', 'gstin', 'city', 'payment_terms_days', 'preferred_channel'],
-    example: ['Koyambedu Fresh', 'KOY', 'Ravi', '9840000000', '9840000000', '', '', 'Chennai', '7', 'whatsapp'],
-    help: 'preferred_channel is whatsapp, email or sms. Vendors whose name already exists are skipped.',
+    columns: ['name', 'contact_person', 'phone', 'whatsapp', 'email', 'gstin', 'city', 'payment_terms_days', 'preferred_channel'],
+    example: ['Koyambedu Fresh', 'Ravi', '9840000000', '9840000000', '', '', 'Chennai', '7', 'whatsapp'],
+    help: 'preferred_channel is whatsapp, email or sms. Codes (V0001, V0002, …) are given automatically. Vendors whose name already exists are skipped.',
   },
   rates: {
     title: 'Vendor rates',
@@ -65,7 +65,7 @@ export default function ImportData() {
     if (kind === 'items') {
       if (!d.name) return 'name is missing';
       const u = norm(d.stock_unit);
-      if (!['g', 'kg', 'ml', 'l', 'pcs'].includes(u)) return 'stock_unit must be g, ml or pcs';
+      if (!ref.units.some(x => x.code === u)) return 'stock_unit must be kg, g, l, ml, pcs or dozen';
       if (d.type && !['raw', 'prep', 'packaging', 'consumable'].includes(norm(d.type))) return 'type must be raw, prep, packaging or consumable';
       if (d.pack_name && toNum(d.pack_qty) <= 0) return 'pack_qty is missing';
       return null;
@@ -126,10 +126,12 @@ export default function ImportData() {
       try {
         if (kind === 'items') {
           if (lookups.itemByName.get(norm(d.name))) { next[i] = { ...r, status: 'skipped', message: 'Already exists' }; continue; }
-          const unit = ({ kg: 'g', l: 'ml' } as Record<string, string>)[norm(d.stock_unit)] ?? norm(d.stock_unit);
+          const stock = ref.units.find(u => u.code === norm(d.stock_unit));
+          if (!stock) throw new Error(`stock_unit "${d.stock_unit}" should be kg, g, l, ml, pcs or dozen`);
+          const unit = stock.code;
           const item = await run<Item>(sb.from('items').insert({
             organisation_id: orgId, name: d.name.trim(), code: d.code || null, category_id: await ensureCategory(d.category ?? '', cats),
-            item_type: norm(d.type) || 'raw', base_unit: unit, default_yield_pct: toNum(d.yield_pct) || 100,
+            item_type: norm(d.type) || 'raw', base_unit: stock.base_code, stock_unit: stock.code, default_yield_pct: toNum(d.yield_pct) || 100,
             shelf_life_days: d.shelf_life_days ? Math.round(toNum(d.shelf_life_days)) : null, hsn_code: d.hsn_code || null,
             gst_rate: d.gst_rate === '' || d.gst_rate === undefined ? null : toNum(d.gst_rate),
           }).select().single());
@@ -140,7 +142,7 @@ export default function ImportData() {
         } else if (kind === 'vendors') {
           if (lookups.vendorByName.get(norm(d.name))) { next[i] = { ...r, status: 'skipped', message: 'Already exists' }; continue; }
           await run(sb.from('vendors').insert({
-            organisation_id: orgId, name: d.name.trim(), code: d.code || null, contact_person: d.contact_person || null, phone: d.phone || null,
+            organisation_id: orgId, name: d.name.trim(), contact_person: d.contact_person || null, phone: d.phone || null,
             whatsapp: d.whatsapp || null, email: d.email || null, gstin: d.gstin ? d.gstin.toUpperCase() : null, city: d.city || null,
             payment_terms_days: Math.round(toNum(d.payment_terms_days)), preferred_channel: norm(d.preferred_channel) || 'whatsapp',
           }));

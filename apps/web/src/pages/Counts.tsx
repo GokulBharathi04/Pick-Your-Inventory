@@ -5,7 +5,7 @@ import { useAction, useLoad } from '../lib/hooks';
 import { useRoute } from '../lib/router';
 import { run, sb, selectAll } from '../lib/supabase';
 import { fmtDateTime, fmtMoney, fmtQty, toNum } from '../lib/format';
-import { defaultUnit, fromBase, toBase } from '../lib/units';
+import { fromBase, toBase, stockUnit } from '../lib/units';
 import { downloadCsv } from '../lib/csv';
 import type { CountLine, ItemOutletSettings, LocationStock, StockCount } from '../lib/types';
 import { Button, Checkbox, DataTable, ErrorNote, Field, Modal, Notice, PageHeader, ReasonModal, Select, StatusBadge, Toolbar, useToast } from '../components/ui';
@@ -155,7 +155,7 @@ function CountSheet({ id, onClose }: { id: string; onClose: () => void }) {
   const saveLine = async (line: CountLine, value: string) => {
     const it = ref.item(line.item_id);
     if (!it) return;
-    const qty = value.trim() === '' ? null : toBase(it, toNum(value), defaultUnit(it.base_unit), ref.units);
+    const qty = value.trim() === '' ? null : toBase(it, toNum(value), stockUnit(it), ref.units);
     setSaving(s => ({ ...s, [line.id]: 'saving' }));
     const { error: err } = await sb.from('stock_count_lines').update({ counted_qty: qty }).eq('id', line.id);
     setSaving(s => ({ ...s, [line.id]: err ? 'error' : 'saved' }));
@@ -210,7 +210,7 @@ function CountSheet({ id, onClose }: { id: string; onClose: () => void }) {
               <tbody>
                 {lines.map(l => {
                   const it = ref.item(l.item_id);
-                  const u = it ? defaultUnit(it.base_unit) : '';
+                  const u = it ? stockUnit(it) : '';
                   const shown = typed[l.id] ?? (l.counted_qty !== null && it ? String(fromBase(it, toNum(l.counted_qty), u, ref.units)) : '');
                   return (
                     <tr key={l.id}>

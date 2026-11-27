@@ -17,13 +17,14 @@ export type Outlet = {
   is_active: boolean;
 };
 
-export type StorageLocation = { id: string; organisation_id: string; outlet_id: string; name: string; kind: string; is_active: boolean };
+export type StorageLocation = { id: string; organisation_id: string; outlet_id: string; name: string; kind: string; receives_goods: boolean; is_active: boolean };
 
 export type Category = { id: string; organisation_id: string; name: string; sort_order: number; is_active: boolean };
 
 export type Item = {
   id: string; organisation_id: string; item_no: number | null; category_id: string | null; code: string | null; name: string;
-  item_type: 'raw' | 'prep' | 'packaging' | 'consumable'; base_unit: string; alt_unit: string | null; alt_per_base: Num | null;
+  item_type: 'raw' | 'prep' | 'packaging' | 'consumable'; base_unit: string; stock_unit: string; variable_weight: boolean;
+  alt_unit: string | null; alt_per_base: Num | null;
   default_yield_pct: Num; shelf_life_days: number | null; track_expiry: boolean; hsn_code: string | null; gst_rate: Num | null;
   deduct_ingredients_on_sale: boolean; is_active: boolean;
 };
@@ -184,12 +185,13 @@ export type GoodsReceipt = {
 export type GoodsReceiptLine = {
   id: string; receipt_id: string; purchase_order_line_id: string | null; item_id: string; pack_size_id: string | null; unit: string | null;
   base_per_unit: Num; quantity: Num; rate: Num; gst_rate: Num | null; quantity_in_base: Num; amount: Num;
+  pieces: Num | null; credited_in_base: Num | null;
 };
 
 export type ReorderSuggestion = {
   item_id: string; on_hand: Num; on_order: Num; reorder_level: Num; reorder_qty: Num | null; max_level: Num | null; suggested_base: Num;
   vendor_id: string | null; pack_size_id: string | null; unit: string | null; rate: Num | null; base_per_unit: Num | null;
-  suggested_units: Num | null; lead_time_days: number | null;
+  suggested_units: Num | null; lead_time_days: number | null; location_id: string | null;
 };
 
 export type RecipeCost = {

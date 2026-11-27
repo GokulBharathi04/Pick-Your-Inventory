@@ -4,7 +4,7 @@ import { useRefData } from '../lib/refdata';
 import { useAction, useLoad } from '../lib/hooks';
 import { run, sb, selectAll } from '../lib/supabase';
 import { fmtMoney, fmtPct, fmtQty, toNum } from '../lib/format';
-import { defaultUnit, toBase } from '../lib/units';
+import { toBase, stockUnit } from '../lib/units';
 import type { Item, MenuCategory, MenuItem, MenuItemOutlet, Recipe, RecipeCost } from '../lib/types';
 import { Badge, Button, Checkbox, DataTable, ErrorNote, Field, FormGrid, Modal, PageHeader, Select, Tabs, Toolbar, useToast } from '../components/ui';
 import { RecipeEditor, RecipeStatus } from './Recipe';
@@ -76,7 +76,7 @@ export default function Menu() {
               { label: 'How it’s used', render: i => (i.deduct_ingredients_on_sale ? 'Made to order' : 'Made in batches, kept in stock') },
               { label: 'Recipe', render: i => <RecipeStatus recipes={recipesFor({ prep: i.id })} /> },
               { label: 'Batch makes', num: true, render: i => { const c = activeCost({ prep: i.id }); return c ? fmtQty(c.yield_qty, i.base_unit) : '—'; } },
-              { label: `Cost per kg / l / pc`, num: true, render: i => { const c = activeCost({ prep: i.id }); return c ? fmtMoney(toNum(c.cost_per_unit) * toBase(i, 1, defaultUnit(i.base_unit), ref.units)) : '—'; } },
+              { label: `Cost per kg / l / pc`, num: true, render: i => { const c = activeCost({ prep: i.id }); return c ? fmtMoney(toNum(c.cost_per_unit) * toBase(i, 1, stockUnit(i), ref.units)) : '—'; } },
             ]} />
         </>
       )}

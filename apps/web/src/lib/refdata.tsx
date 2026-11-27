@@ -23,7 +23,9 @@ type RefData = {
   department: (id: string | null | undefined) => Department | undefined;
   packSize: (id: string | null | undefined) => PackSize | undefined;
   outletLocations: StorageLocation[];
-  outletStores: StorageLocation[];
+  // Locations of the outlet that receive goods: stores, and any kitchen or cold
+  // room set to. Orders, receipts, issues and returns use these.
+  receivingLocations: StorageLocation[];
   outletDepartments: Department[];
   reload: () => Promise<void>;
 };
@@ -81,7 +83,7 @@ export function RefDataProvider({ children }: { children: ReactNode }) {
       department: id => (id ? deptMap.get(id) : undefined),
       packSize: id => (id ? packMap.get(id) : undefined),
       outletLocations,
-      outletStores: outletLocations.filter(l => l.kind === 'store'),
+      receivingLocations: outletLocations.filter(l => l.receives_goods),
       outletDepartments: state.departments.filter(d => d.outlet_id === outletId),
       reload,
     };

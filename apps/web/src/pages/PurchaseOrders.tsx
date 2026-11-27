@@ -5,10 +5,10 @@ import { useAction, useLoad } from '../lib/hooks';
 import { navigate, useRoute } from '../lib/router';
 import { run, sb } from '../lib/supabase';
 import { addDays, fmtDate, fmtDateTime, fmtMoney, fmtQty, isoDay, toNum } from '../lib/format';
-import { defaultUnit } from '../lib/units';
-import type { PurchaseOrder, PurchaseOrderLine, VendorItem } from '../lib/types';
-import { Button, DataTable, ErrorNote, Field, FormGrid, Modal, Notice, PageHeader, ReasonModal, Select, StatusBadge, Toolbar, useToast } from '../components/ui';
-import { ItemSelect, NeedsOutlet, PurchaseUnitSelect, StoreSelect, VendorSelect, parsePurchaseUnit, purchaseUnitValue } from '../components/inputs';
+import { stockUnit } from '../lib/units';
+import type { ItemOutletSettings, PurchaseOrder, PurchaseOrderLine, StorageLocation, VendorItem } from '../lib/types';
+import { Button, Checkbox, DataTable, ErrorNote, Field, FormGrid, Modal, Notice, PageHeader, ReasonModal, Select, StatusBadge, Toolbar, useToast } from '../components/ui';
+import { ItemSelect, NeedsOutlet, PurchaseUnitSelect, ReceivingSelect, VendorSelect, parsePurchaseUnit, purchaseUnitValue } from '../components/inputs';
 
 export const OPEN_PO = ['draft', 'submitted', 'approved', 'partially_received'];
 
@@ -17,6 +17,18 @@ export function lineQty(qty: unknown, packSizeId: string | null, unit: string | 
   const n = toNum(qty);
   const label = packSizeId ? packName(packSizeId) ?? 'pack' : unit ?? '';
   return `${new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 }).format(n)} ${label}`;
+}
+
+// Where an item is received: its default location at this outlet if that
+// location receives goods. Items with no such location go to the stores.
+export function receivedAt(defaultLocationId: string | null | undefined, receiving: StorageLocation[]): string | null {
+  return defaultLocationId && receiving.some(l => l.id === defaultLocationId) ? defaultLocationId : null;
+}
+
+export function belongsAt(home: string | null, location: StorageLocation | undefined, receiving: StorageLocation[]): boolean {
+  if (!location) return true;
+  if (home) return home === location.id;
+  return location.kind === 'store' || !receiving.some(l => l.kind === 'store');
 }
 
 export default function PurchaseOrders() {
@@ -46,7 +58,7 @@ function PurchaseOrdersInner() {
 
   return (
     <div>
-      <PageHeader title="Purchase orders" subtitle={`${outlet?.name} · raise, approve and track orders to vendors; goods are received into the store`}
+      <PageHeader title="Purchase orders" subtitle={`${outlet?.name} · raise, approve and track orders to vendors`}
         actions={can('purchase.order') && <Button onClick={() => setEditing('new')}>New purchase order</Button>} />
       <ErrorNote error={q.error} />
       <Toolbar>
@@ -83,7 +95,7 @@ function OrderEditor({ order, onClose, onSaved }: { order: PurchaseOrder | null;
   const toast = useToast();
   const { busy, error, act } = useAction();
   const [vendorId, setVendorId] = useState(order?.vendor_id ?? '');
-  const [storeId, setStoreId] = useState(order?.deliver_to_location_id ?? ref.outletStores.find(l => l.is_active)?.id ?? '');
+  const [storeId, setStoreId] = useState(order?.deliver_to_location_id ?? ref.receivingLocations.find(l => l.is_active)?.id ?? '');
   const [expected, setExpected] = useState(order?.expected_date ?? addDays(isoDay(), 1));
   const [note, setNote] = useState(order?.note ?? '');
   const [lines, setLines] = useState<Draft[]>([{ key: 1, itemId: '', pu: '', qty: '', rate: '', gst: '' }]);
@@ -102,6 +114,17 @@ function OrderEditor({ order, onClose, onSaved }: { order: PurchaseOrder | null;
     return null;
   }, [order?.id]);
 
+  // Each item's default location here, to offer only the items kept where the order goes.
+  const homesQ = useLoad(async () => {
+    const rows = await run<Pick<ItemOutletSettings, 'item_id' | 'default_location_id'>[]>(
+      sb.from('item_outlet_settings').select('item_id,default_location_id').eq('outlet_id', outletId));
+    return new Map(rows.map(r => [r.item_id, r.default_location_id]));
+  }, [outletId]);
+  const [allItems, setAllItems] = useState(false);
+  const deliverTo = ref.location(storeId);
+  const homeOf = (itemId: string) => receivedAt(homesQ.data?.get(itemId), ref.receivingLocations);
+  const itemFilter = (i: { id: string }) => allItems || !homesQ.data || belongsAt(homeOf(i.id), deliverTo, ref.receivingLocations);
+
   const pricesQ = useLoad(async () => (vendorId
     ? run<VendorItem[]>(sb.from('vendor_items').select('*').eq('vendor_id', vendorId).is('valid_to', null))
     : [] as VendorItem[]), [vendorId]);
@@ -114,7 +137,7 @@ function OrderEditor({ order, onClose, onSaved }: { order: PurchaseOrder | null;
   const pickItem = (key: number, itemId: string) => {
     const it = ref.item(itemId);
     const vp = prices.find(v => v.item_id === itemId);
-    const pu = vp ? purchaseUnitValue({ packSizeId: vp.pack_size_id, unit: vp.price_unit }) : it ? defaultUnit(it.base_unit) : '';
+    const pu = vp ? purchaseUnitValue({ packSizeId: vp.pack_size_id, unit: vp.price_unit }) : it?.variable_weight ? 'pcs' : it ? stockUnit(it) : '';
     setLine(key, { itemId, pu, rate: vp ? String(toNum(vp.rate)) : '', gst: it?.gst_rate == null ? '' : String(toNum(it.gst_rate)) });
   };
   const pickUnit = (key: number, itemId: string, pu: string) => {
@@ -127,7 +150,7 @@ function OrderEditor({ order, onClose, onSaved }: { order: PurchaseOrder | null;
   const tax = filled.reduce((s, l) => s + (toNum(l.qty) * toNum(l.rate) * toNum(l.gst)) / 100, 0);
 
   const save = (submit: boolean) => act(async () => {
-    if (!vendorId || !storeId) throw new Error('Choose the vendor and the store to deliver to');
+    if (!vendorId || !storeId) throw new Error('Choose the vendor and where to deliver');
     if (filled.length === 0) throw new Error('Add at least one item and quantity');
     const missing = filled.find(l => l.rate === '');
     if (missing) throw new Error(`Enter a rate for ${ref.item(missing.itemId)?.name}`);
@@ -153,24 +176,32 @@ function OrderEditor({ order, onClose, onSaved }: { order: PurchaseOrder | null;
         <Button variant="secondary" busy={busy} onClick={() => void save(false)}>Save draft</Button>
         {can('purchase.order') && <Button busy={busy} onClick={() => void save(true)}>Save and submit</Button>}
       </>}>
-      <ErrorNote error={error ?? pricesQ.error} />
+      <ErrorNote error={error ?? pricesQ.error ?? homesQ.error} />
       {order?.decision_note && <Notice tone="warn">Sent back: {order.decision_note}</Notice>}
       <FormGrid cols={4}>
         <Field label="Vendor"><VendorSelect value={vendorId} onChange={setVendorId} /></Field>
-        <Field label="Deliver to"><StoreSelect value={storeId} onChange={setStoreId} /></Field>
+        <Field label="Deliver to"><ReceivingSelect value={storeId} onChange={setStoreId} /></Field>
         <Field label="Expected on"><input className="input" type="date" value={expected} min={isoDay()} onChange={e => setExpected(e.target.value)} /></Field>
         <Field label="Note"><input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" /></Field>
       </FormGrid>
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+        <span>{allItems ? 'Showing every item.' : `Showing items kept at ${deliverTo?.name ?? 'this location'}.`}</span>
+        <Checkbox label="Show all items" checked={allItems} onChange={setAllItems} />
+      </div>
+      <div className="mt-3 flex flex-col gap-2">
         {lines.map(l => {
           const it = ref.item(l.itemId);
           const sells = !!prices.find(v => v.item_id === l.itemId);
+          const home = l.itemId ? homeOf(l.itemId) : null;
+          const elsewhere = it && deliverTo && !belongsAt(home, deliverTo, ref.receivingLocations);
+          const typical = it?.variable_weight && toNum(it.alt_per_base) > 0 ? 1 / toNum(it.alt_per_base) : 0;
+          const pieces = typical && l.pu && !l.pu.startsWith('pack:') ? toNum(l.qty) * toNum(ref.units.find(u => u.code === l.pu && u.base_code === 'pcs')?.factor_to_base) : 0;
           return (
             <div key={l.key} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-[1fr_250px_120px_90px_110px_auto]">
-              <Field label="Item" hint={l.itemId && vendorId && !sells ? 'This vendor has no price for it' : undefined}>
-                <ItemSelect value={l.itemId} onChange={id => pickItem(l.key, id)} />
+              <Field label="Item" hint={elsewhere ? `Usually received at ${home ? ref.location(home)?.name : 'the store'}` : l.itemId && vendorId && !sells ? 'This vendor has no price for it' : undefined}>
+                <ItemSelect value={l.itemId} onChange={id => pickItem(l.key, id)} filter={itemFilter} />
               </Field>
-              <Field label="Quantity">
+              <Field label="Quantity" hint={pieces > 0 ? `About ${fmtQty(pieces * typical, it?.base_unit)}; the actual weight is recorded on receipt` : undefined}>
                 <div className="flex gap-1.5">
                   <input className="input min-w-0 flex-1" type="number" inputMode="decimal" min="0" step="any" value={l.qty} disabled={!it} onChange={e => setLine(l.key, { qty: e.target.value })} placeholder="0" />
                   <PurchaseUnitSelect item={it} value={l.pu} onChange={v => pickUnit(l.key, l.itemId, v)} />
@@ -250,11 +281,11 @@ function OrderDetail({ id, onClose, onChanged, onEdit }: { id: string; onClose: 
               { label: 'GST', num: true, render: l => (l.gst_rate == null ? '—' : `${toNum(l.gst_rate)}%`) },
               { label: 'Amount', num: true, render: l => fmtMoney(l.amount) },
               { label: 'Received', num: true, render: l => {
-                const it = ref.item(l.item_id);
                 const got = toNum(l.received_in_base);
                 const want = toNum(l.quantity_in_base);
                 const tone = got === 0 ? 'text-muted' : got < want ? 'text-amber-700' : got > want ? 'text-sky-700' : 'text-green-700';
-                return <span className={tone}>{fmtQty(got, it?.base_unit)} of {fmtQty(want, it?.base_unit)}</span>;
+                const units = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 3 }).format(got / (toNum(l.base_per_unit) || 1));
+                return <span className={tone}>{units} of {lineQty(l.quantity, l.pack_size_id, l.unit, packName)}{got > want && ' (extra)'}</span>;
               } },
             ]}
             footer={<tr>

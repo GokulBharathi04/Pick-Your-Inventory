@@ -4,7 +4,7 @@ import { useRefData } from '../lib/refdata';
 import { useAction, useLoad } from '../lib/hooks';
 import { run, sb } from '../lib/supabase';
 import { fmtDate, fmtMoney, fmtNum, fmtPct, fmtQty, fmtRate, toNum } from '../lib/format';
-import { defaultUnit, fromBase, toBase, unitsFor } from '../lib/units';
+import { fromBase, toBase, unitsFor, stockUnit } from '../lib/units';
 import type { Item, ItemCost, Recipe, RecipeLine } from '../lib/types';
 import { Badge, Button, DataTable, ErrorNote, Field, Notice, StatusBadge, useToast } from '../components/ui';
 import { ItemSelect, QtyInput } from '../components/inputs';
@@ -33,7 +33,7 @@ export function RecipeEditor({ menuItemId, prepItem, sellingPrice }: { menuItemI
   const isDraft = recipe?.status === 'draft' && editable;
 
   // Yield: portions for a dish; amount one batch makes for a prep item.
-  const yieldUnit = prepItem ? defaultUnit(prepItem.base_unit) : '';
+  const yieldUnit = prepItem ? stockUnit(prepItem) : '';
   const [yieldText, setYieldText] = useState('');
   useEffect(() => {
     if (!recipe) return;

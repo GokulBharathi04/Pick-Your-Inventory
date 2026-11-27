@@ -5,11 +5,11 @@ import { useAction, useLoad } from '../lib/hooks';
 import { Link, useRoute } from '../lib/router';
 import { run, sb, selectAll } from '../lib/supabase';
 import { addDays, fmtDate, fmtDateTime, fmtMoney, fmtQty, isoDay, toNum } from '../lib/format';
-import { defaultUnit, fromBase, toBase } from '../lib/units';
+import { fromBase, toBase, stockUnit } from '../lib/units';
 import { downloadCsv } from '../lib/csv';
 import type { DepartmentIssue, DepartmentIssueLine, DepartmentUsage, PlanningStock } from '../lib/types';
 import { Badge, Button, DataTable, Empty, ErrorNote, Field, FormGrid, Modal, Notice, PageHeader, ReasonModal, Section, Select, StatusBadge, Tabs, Toolbar, useToast } from '../components/ui';
-import { DepartmentSelect, ItemSelect, NeedsOutlet, QtyInput, StoreSelect, unitForItem } from '../components/inputs';
+import { DepartmentSelect, ItemSelect, NeedsOutlet, QtyInput, ReceivingSelect, unitForItem } from '../components/inputs';
 import { useProfiles } from './StockCard';
 
 export default function Issues() {
@@ -24,13 +24,13 @@ function IssuesInner() {
   const [tick, setTick] = useState(0);
   const changed = () => setTick(t => t + 1);
 
-  if (ref.outletDepartments.filter(d => d.is_active).length === 0 || ref.outletStores.length === 0) {
+  if (ref.outletDepartments.filter(d => d.is_active).length === 0 || ref.receivingLocations.length === 0) {
     return (
       <div>
         <PageHeader title="Issues and returns" />
-        <Empty title={ref.outletStores.length === 0 ? `${outlet?.name} has no store location` : `${outlet?.name} has no departments yet`}>
+        <Empty title={ref.receivingLocations.length === 0 ? `${outlet?.name} has no store` : `${outlet?.name} has no departments yet`}>
           {can('organisation.manage')
-            ? <>Add {ref.outletStores.length === 0 ? 'a store location' : 'departments such as Tandoor, Chinese or Bar'} in <Link to="/settings" className="text-teal-ink underline">Settings</Link>.</>
+            ? <>Add {ref.receivingLocations.length === 0 ? 'a store location' : 'departments such as Tandoor, Chinese or Bar'} in <Link to="/settings" className="text-teal-ink underline">Settings</Link>.</>
             : 'Ask your manager to set them up in Settings.'}
         </Empty>
       </div>
@@ -62,7 +62,7 @@ function IssueForm({ onSaved }: { onSaved: () => void }) {
   const toast = useToast();
   const { busy, error, act } = useAction();
   const [deptId, setDeptId] = useState(ref.outletDepartments.find(d => d.is_active)?.id ?? '');
-  const [storeId, setStoreId] = useState(ref.outletStores.find(l => l.is_active)?.id ?? '');
+  const [storeId, setStoreId] = useState(ref.receivingLocations.find(l => l.is_active)?.id ?? '');
   const [day, setDay] = useState(isoDay());
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<Draft[]>([{ key: 1, itemId: '', qty: '', unit: '' }]);
@@ -92,7 +92,7 @@ function IssueForm({ onSaved }: { onSaved: () => void }) {
       <ErrorNote error={error} />
       <FormGrid cols={4}>
         <Field label="Department"><DepartmentSelect value={deptId} onChange={setDeptId} /></Field>
-        <Field label="From store"><StoreSelect value={storeId} onChange={setStoreId} /></Field>
+        <Field label="From"><ReceivingSelect value={storeId} onChange={setStoreId} /></Field>
         <Field label="Business day"><input className="input" type="date" value={day} max={isoDay()} onChange={e => setDay(e.target.value)} /></Field>
         <Field label="Note"><input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional, e.g. lunch service" /></Field>
       </FormGrid>
@@ -127,7 +127,7 @@ function ReturnForm({ onSaved }: { onSaved: () => void }) {
   const toast = useToast();
   const { busy, error, act } = useAction();
   const [deptId, setDeptId] = useState(ref.outletDepartments.find(d => d.is_active)?.id ?? '');
-  const [storeId, setStoreId] = useState(ref.outletStores.find(l => l.is_active)?.id ?? '');
+  const [storeId, setStoreId] = useState(ref.receivingLocations.find(l => l.is_active)?.id ?? '');
   const [day, setDay] = useState(isoDay());
   const [note, setNote] = useState('');
   const [back, setBack] = useState<Record<string, string>>({});
@@ -146,7 +146,7 @@ function ReturnForm({ onSaved }: { onSaved: () => void }) {
       .filter(r => toNum(back[r.item_id]) > 0)
       .map(r => {
         const it = ref.item(r.item_id)!;
-        return { item_id: r.item_id, quantity: toBase(it, toNum(back[r.item_id]), defaultUnit(it.base_unit), ref.units) };
+        return { item_id: r.item_id, quantity: toBase(it, toNum(back[r.item_id]), stockUnit(it), ref.units) };
       });
     if (lines.length === 0) throw new Error('Enter what is being returned for at least one item');
     await run(sb.rpc('post_department_movement', {
@@ -165,7 +165,7 @@ function ReturnForm({ onSaved }: { onSaved: () => void }) {
       <ErrorNote error={error ?? q.error} />
       <FormGrid cols={4}>
         <Field label="Department"><DepartmentSelect value={deptId} onChange={v => { setDeptId(v); setBack({}); }} /></Field>
-        <Field label="Back to store"><StoreSelect value={storeId} onChange={setStoreId} /></Field>
+        <Field label="Back to"><ReceivingSelect value={storeId} onChange={setStoreId} /></Field>
         <Field label="Business day"><input className="input" type="date" value={day} max={isoDay()} onChange={e => { setDay(e.target.value); setBack({}); }} /></Field>
         <Field label="Note"><input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" /></Field>
       </FormGrid>
@@ -185,7 +185,7 @@ function ReturnForm({ onSaved }: { onSaved: () => void }) {
                     label: 'Returning now', num: true, render: r => {
                       const it = ref.item(r.item_id);
                       if (!it) return null;
-                      const u = defaultUnit(it.base_unit);
+                      const u = stockUnit(it);
                       const max = fromBase(it, toNum(r.used), u, ref.units);
                       return (
                         <div className="flex items-center justify-end gap-1">

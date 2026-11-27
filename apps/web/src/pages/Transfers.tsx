@@ -5,7 +5,7 @@ import { useAction, useLoad } from '../lib/hooks';
 import { useRoute } from '../lib/router';
 import { run, sb } from '../lib/supabase';
 import { fmtDateTime, fmtQty, toNum } from '../lib/format';
-import { defaultUnit, fromBase, toBase } from '../lib/units';
+import { fromBase, toBase, stockUnit } from '../lib/units';
 import type { Transfer, TransferLine } from '../lib/types';
 import { Button, DataTable, ErrorNote, Field, FormGrid, Modal, Notice, PageHeader, ReasonModal, Select, StatusBadge, Toolbar, useToast } from '../components/ui';
 import { ItemSelect, LocationSelect, NeedsOutlet, QtyInput, unitForItem } from '../components/inputs';
@@ -143,7 +143,7 @@ function TransferDetail({ id, onClose, onChanged }: { id: string; onClose: () =>
     const payload = lines.map(l => {
       const it = ref.item(l.item_id)!;
       const v = received[l.id];
-      return { line_id: l.id, quantity: v === undefined || v === '' ? toNum(l.quantity_sent) : toBase(it, toNum(v), defaultUnit(it.base_unit), ref.units) };
+      return { line_id: l.id, quantity: v === undefined || v === '' ? toNum(l.quantity_sent) : toBase(it, toNum(v), stockUnit(it), ref.units) };
     });
     await run(sb.rpc('receive_stock_transfer', { p_transfer_id: id, p_received: payload }));
     toast('Received. Stock is now in the receiving location.');
@@ -180,7 +180,7 @@ function TransferDetail({ id, onClose, onChanged }: { id: string; onClose: () =>
                 label: 'Received', num: true, render: l => {
                   const it = ref.item(l.item_id);
                   if (t.status === 'sent' && it) {
-                    const u = defaultUnit(it.base_unit);
+                    const u = stockUnit(it);
                     return (
                       <div className="flex items-center justify-end gap-1">
                         <input className="input w-28 text-right" type="number" min="0" step="any"

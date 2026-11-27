@@ -20,7 +20,7 @@ export default function Vendors() {
   const [editing, setEditing] = useState<Vendor | 'new' | null>(route.query.get('new') ? 'new' : null);
   const rows = useMemo(() => {
     const s = search.trim().toLowerCase();
-    return ref.vendors.filter(v => (showInactive || v.is_active) && (!s || v.name.toLowerCase().includes(s) || (v.phone ?? '').includes(s)));
+    return ref.vendors.filter(v => (showInactive || v.is_active) && (!s || v.name.toLowerCase().includes(s) || (v.code ?? '').toLowerCase().includes(s) || (v.phone ?? '').includes(s)));
   }, [ref.vendors, search, showInactive]);
 
   return (
@@ -31,11 +31,12 @@ export default function Vendors() {
           <Button onClick={() => setEditing('new')}>Add vendor</Button>
         </>} />
       <Toolbar>
-        <input className="input max-w-xs" placeholder="Search name or phone" value={search} onChange={e => setSearch(e.target.value)} />
+        <input className="input max-w-xs" placeholder="Search name, code or phone" value={search} onChange={e => setSearch(e.target.value)} />
         <Checkbox label="Show inactive" checked={showInactive} onChange={setShowInactive} />
       </Toolbar>
       <DataTable rows={rows} rowKey={v => v.id} onRowClick={v => setEditing(v)} empty={ref.loading ? 'Loading…' : 'No vendors yet'}
         columns={[
+          { label: 'Code', render: v => <span className="text-muted tabular-nums">{v.code ?? '—'}</span> },
           { label: 'Vendor', render: v => <span className="font-medium">{v.name}</span> },
           { label: 'Contact', render: v => v.contact_person ?? '—' },
           { label: 'Phone', render: v => v.phone ?? '—' },
@@ -67,7 +68,7 @@ function VendorDetails({ vendor, onSaved }: { vendor: Vendor | null; onSaved: (v
   const { busy, error, act } = useAction();
   const s = (v: string | null | undefined) => v ?? '';
   const [f, setF] = useState({
-    name: s(vendor?.name), code: s(vendor?.code), contact_person: s(vendor?.contact_person), phone: s(vendor?.phone), whatsapp: s(vendor?.whatsapp),
+    name: s(vendor?.name), contact_person: s(vendor?.contact_person), phone: s(vendor?.phone), whatsapp: s(vendor?.whatsapp),
     email: s(vendor?.email), gstin: s(vendor?.gstin), address_line1: s(vendor?.address_line1), address_line2: s(vendor?.address_line2),
     city: s(vendor?.city), state: s(vendor?.state), pincode: s(vendor?.pincode), payment_terms_days: String(vendor?.payment_terms_days ?? 0),
     preferred_channel: vendor?.preferred_channel ?? 'whatsapp', notes: s(vendor?.notes), is_active: vendor?.is_active ?? true,
@@ -77,7 +78,7 @@ function VendorDetails({ vendor, onSaved }: { vendor: Vendor | null; onSaved: (v
   const save = () => act(async () => {
     if (!f.name.trim()) throw new Error('Enter the vendor’s name');
     const values = {
-      name: f.name.trim(), code: n(f.code), contact_person: n(f.contact_person), phone: n(f.phone), whatsapp: n(f.whatsapp), email: n(f.email),
+      name: f.name.trim(), contact_person: n(f.contact_person), phone: n(f.phone), whatsapp: n(f.whatsapp), email: n(f.email),
       gstin: n(f.gstin.toUpperCase()), address_line1: n(f.address_line1), address_line2: n(f.address_line2), city: n(f.city), state: n(f.state),
       pincode: n(f.pincode), payment_terms_days: Math.max(0, Math.round(Number(f.payment_terms_days) || 0)), preferred_channel: f.preferred_channel, notes: n(f.notes),
     };
@@ -94,7 +95,7 @@ function VendorDetails({ vendor, onSaved }: { vendor: Vendor | null; onSaved: (v
       <fieldset disabled={!can('masters.edit')} className="contents">
         <FormGrid cols={3}>
           <Field label="Name" className="sm:col-span-2"><input className="input" value={f.name} onChange={e => set('name')(e.target.value)} autoFocus={!vendor} /></Field>
-          <Field label="Code"><input className="input" value={f.code} onChange={e => set('code')(e.target.value)} /></Field>
+          <Field label="Code" hint={vendor ? 'Given automatically' : 'Given when you add the vendor'}><input className="input" value={vendor?.code ?? 'Automatic'} readOnly disabled /></Field>
           <Field label="Contact person"><input className="input" value={f.contact_person} onChange={e => set('contact_person')(e.target.value)} /></Field>
           <Field label="Phone"><input className="input" inputMode="tel" value={f.phone} onChange={e => set('phone')(e.target.value)} /></Field>
           <Field label="WhatsApp number"><input className="input" inputMode="tel" value={f.whatsapp} onChange={e => set('whatsapp')(e.target.value)} /></Field>
