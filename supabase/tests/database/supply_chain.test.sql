@@ -1,10 +1,12 @@
 -- Supply chain tests (pgTAP): purchase orders, goods receipts, department
--- issues and end-of-day returns, and planning stock. Run with: supabase test db
+-- issues and end-of-day returns, planning stock, vendor codes, stock units,
+-- locations that receive goods and items whose weight varies.
+-- Run with: supabase test db
 -- Everything runs in one transaction and is rolled back.
 begin;
 create extension if not exists pgtap with schema extensions;
 
-select plan(54);
+select plan(87);
 
 -- ---------------------------------------------------------------------------
 -- Setup (as postgres)
@@ -94,6 +96,9 @@ create function pg_temp.po_line(p_po text, p_item text) returns uuid language sq
   $$ select id from public.purchase_order_lines where purchase_order_id = pg_temp.ref(p_po) and item_id = pg_temp.item(p_item) $$;
 create function pg_temp.po_status(p_po text) returns text language sql security definer as
   $$ select status from public.purchase_orders where id = pg_temp.ref(p_po) $$;
+create function pg_temp.kitchen_on_hand(p_item text) returns numeric language sql security definer as
+  $$ select coalesce(sum(l.quantity), 0) from public.stock_ledger l
+     where l.location_id = 'aaaaaaaa-0000-0000-0002-0000000000a1' and l.item_id = pg_temp.item(p_item) $$;
 
 -- ---------------------------------------------------------------------------
 -- 0. Permissions and tabs
@@ -137,7 +142,7 @@ select is((select tax_amount from public.purchase_orders where id = pg_temp.ref(
 select throws_ok($$
   select public.save_purchase_order(null, 'aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001',
     'aaaaaaaa-0000-0000-0002-0000000000a1', jsonb_build_array(jsonb_build_object('item_id', pg_temp.item('Rice'), 'unit', 'kg', 'quantity', 1)))
-$$, '22023', null, 'an order must be delivered to a store, not the kitchen');
+$$, '22023', null, 'an order cannot go to a location that does not receive goods (the kitchen, for now)');
 
 select throws_ok($$
   select public.post_goods_receipt('aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001',
@@ -180,8 +185,8 @@ select lives_ok($$
     jsonb_build_array(
       jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po1', 'Rice'), 'quantity', 20),
       jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po1', 'Tomato'), 'quantity', 0)),
-    pg_temp.ref('po1'), 'INV-101', current_date)
-$$, 'the storekeeper receives 20 kg of rice; the tomatoes have not come');
+    pg_temp.ref('po1'), 'INV-101', current_date, p_keep_open => true)
+$$, 'the storekeeper receives 20 kg of rice, the tomatoes have not come, and the rest stays on order');
 
 select is(pg_temp.on_hand('Rice'), 20000::numeric, 'the store now holds 20 kg of rice');
 select is((select value from public.stock_ledger where source_id = pg_temp.ref('grn1') and item_id = pg_temp.item('Rice')),
@@ -191,21 +196,16 @@ select is((select on_order from public.planning_stock
            where outlet_id = 'aaaaaaaa-0000-0000-0000-0000000000a1' and item_id = pg_temp.item('Rice')),
           5000::numeric, '5 kg of rice is still on order');
 
-select throws_ok($$
-  select public.post_goods_receipt('aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001',
-    'aaaaaaaa-0000-0000-0001-0000000000a1',
-    jsonb_build_array(jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po1', 'Rice'), 'quantity', 6)),
-    pg_temp.ref('po1'))
-$$, '22023', null, 'receiving more than was ordered is refused');
-
 select lives_ok($$
   insert into t_ids select 'grn2', public.post_goods_receipt(
     'aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0001-0000000000a1',
     jsonb_build_array(
       jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po1', 'Rice'), 'quantity', 6),
       jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po1', 'Tomato'), 'quantity', 2)),
-    pg_temp.ref('po1'), 'INV-102', current_date, null, null, true)
-$$, 'with "accept extra" the rest arrives, 1 kg of rice over');
+    pg_temp.ref('po1'), 'INV-102', current_date)
+$$, 'the rest arrives with 1 kg of rice more than was ordered, and is accepted');
+select is((select received_in_base from public.purchase_order_lines where id = pg_temp.po_line('po1', 'Rice')),
+          26000::numeric, 'the order shows 26 kg of rice received against 25 ordered');
 
 select is(pg_temp.po_status('po1'), 'received', 'everything ordered has arrived');
 select is(pg_temp.on_hand('Tomato'), 20000::numeric, 'the store holds 2 crates (20 kg) of tomatoes');
@@ -269,7 +269,7 @@ select throws_ok($$
   select public.post_department_movement('aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-6000-0000-0000-000000000001',
     'aaaaaaaa-0000-0000-0002-0000000000a1', 'issue',
     jsonb_build_array(jsonb_build_object('item_id', pg_temp.item('Rice'), 'quantity', 100)))
-$$, '22023', null, 'issues come from a store, not the kitchen');
+$$, '22023', null, 'issues come from a location that receives goods, not the kitchen');
 
 select lives_ok($$
   insert into t_ids select 'ret1', public.post_department_movement(
@@ -340,6 +340,130 @@ set local request.jwt.claims to '{"sub":"22222222-2222-2222-2222-222222222222","
 
 select throws_ok($$ select * from public.reorder_suggestions('aaaaaaaa-0000-0000-0000-0000000000a1') $$,
   '42501', null, 'another organisation cannot see reorder suggestions');
+
+-- ---------------------------------------------------------------------------
+-- E. Vendor codes, stock units, locations that receive goods, items whose
+--    weight varies, and deliveries that come short or over
+-- ---------------------------------------------------------------------------
+set local request.jwt.claims to '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+
+select is((select code from public.vendors where id = 'aaaaaaaa-5000-0000-0000-000000000001'), 'V0001',
+          'vendors are given a code automatically: V0001');
+select lives_ok($$
+  with v as (insert into public.vendors (organisation_id, name) values ('aaaaaaaa-0000-0000-0000-000000000001', 'Royal Poultry') returning id)
+  insert into t_ids select 'v2', id from v
+$$, 'the owner adds a vendor without typing a code');
+select is((select code from public.vendors where id = pg_temp.ref('v2')), 'V0002', 'the next vendor is V0002');
+select throws_ok($$
+  insert into public.vendors (organisation_id, name, code) values ('aaaaaaaa-0000-0000-0000-000000000001', 'Typed', 'X1')
+$$, '42501', null, 'a vendor code cannot be typed in');
+select throws_ok($$ update public.vendors set code = 'X1' where id = pg_temp.ref('v2') $$,
+  '42501', null, 'or changed');
+
+set local request.jwt.claims to '{"sub":"22222222-2222-2222-2222-222222222222","role":"authenticated"}';
+select lives_ok($$
+  insert into public.vendors (organisation_id, name) values ('bbbbbbbb-0000-0000-0000-000000000001', 'Bob Supplies')
+$$, 'another organisation adds a vendor');
+select is((select code from public.vendors where name = 'Bob Supplies'), 'V0001', 'each organisation numbers its own vendors');
+
+set local request.jwt.claims to '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+
+select is((select string_agg(name || ' ' || stock_unit, ', ' order by name) from public.items
+           where organisation_id = 'aaaaaaaa-0000-0000-0000-000000000001' and name in ('Oil', 'Rice')),
+          'Oil l, Rice kg', 'weights are shown in kg and volumes in litres unless set otherwise');
+select throws_ok($$ update public.items set stock_unit = 'l' where id = pg_temp.item('Rice') $$,
+  '22023', null, 'rice cannot be kept in litres');
+
+select is((select receives_goods from public.storage_locations where id = 'aaaaaaaa-0000-0000-0002-0000000000a1'), false,
+          'a kitchen does not receive goods unless it is set to');
+select lives_ok($$
+  update public.storage_locations set receives_goods = true where id = 'aaaaaaaa-0000-0000-0002-0000000000a1'
+$$, 'the owner lets the kitchen, which has cold storage, receive goods');
+
+select throws_ok($$
+  insert into public.items (organisation_id, name, base_unit, variable_weight)
+  values ('aaaaaaaa-0000-0000-0000-000000000001', 'Chicken by the piece', 'pcs', true)
+$$, '22023', null, 'an item whose weight varies is kept by weight');
+select lives_ok($$
+  insert into public.items (organisation_id, name, base_unit, alt_unit, alt_per_base, variable_weight, gst_rate)
+  values ('aaaaaaaa-0000-0000-0000-000000000001', 'Whole chicken', 'g', 'pcs', 1 / 1200.0, true, 0)
+$$, 'whole chicken is kept by weight, at about 1.2 kg a piece');
+
+select lives_ok($$
+  insert into t_ids select 'po2', public.save_purchase_order(
+    null, 'aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001',
+    'aaaaaaaa-0000-0000-0002-0000000000a1',
+    jsonb_build_array(
+      jsonb_build_object('item_id', pg_temp.item('Whole chicken'), 'unit', 'pcs', 'quantity', 10, 'rate', 250),
+      jsonb_build_object('item_id', pg_temp.item('Rice'), 'unit', 'kg', 'quantity', 10)))
+$$, 'an order for 10 chickens and 10 kg of rice can now go to the kitchen');
+select lives_ok($$ select public.submit_purchase_order(pg_temp.ref('po2')) $$, 'it is submitted');
+select is(public.decide_purchase_order(pg_temp.ref('po2'), true, 'OK'), 'approved', 'and approved');
+select is((select on_order from public.planning_stock
+           where outlet_id = 'aaaaaaaa-0000-0000-0000-0000000000a1' and item_id = pg_temp.item('Whole chicken')),
+          12000::numeric, '10 chickens at about 1.2 kg are 12 kg on order');
+
+set local request.jwt.claims to '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}';
+
+select throws_ok($$
+  select public.post_goods_receipt('aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001',
+    'aaaaaaaa-0000-0000-0002-0000000000a1',
+    jsonb_build_array(jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po2', 'Whole chicken'), 'quantity', 10)),
+    pg_temp.ref('po2'))
+$$, '22023', null, 'chicken is received with its pieces and its weight');
+
+select lives_ok($$
+  insert into t_ids select 'grn3', public.post_goods_receipt(
+    'aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0002-0000000000a1',
+    jsonb_build_array(
+      jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po2', 'Whole chicken'),
+                         'pieces', 10, 'weight', 12.4, 'weight_unit', 'kg', 'unit', 'pcs'),
+      jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po2', 'Rice'), 'quantity', 8)),
+    pg_temp.ref('po2'), 'INV-201', current_date)
+$$, '10 chickens weighing 12.4 kg and 8 of the 10 kg of rice arrive at the kitchen');
+
+select is(pg_temp.kitchen_on_hand('Whole chicken'), 12400::numeric, 'the kitchen holds 12.4 kg of chicken: stock follows the actual weight');
+select is((select value from public.stock_ledger where source_id = pg_temp.ref('grn3') and item_id = pg_temp.item('Whole chicken')),
+          2500.00::numeric, 'it is valued at 10 pieces × ₹250 = ₹2,500');
+select is((select received_in_base from public.purchase_order_lines where id = pg_temp.po_line('po2', 'Whole chicken')),
+          12000::numeric, 'the order counts chicken by the piece: all 10 arrived');
+select is(pg_temp.po_status('po2'), 'closed', 'a delivery that comes short closes the order');
+select ok((select close_reason from public.purchase_orders where id = pg_temp.ref('po2')) ~ '^Delivered short \(GRN-[0-9]+\)$',
+          'the order says which receipt came short');
+select is((select on_order from public.planning_stock
+           where outlet_id = 'aaaaaaaa-0000-0000-0000-0000000000a1' and item_id = pg_temp.item('Rice')),
+          0::numeric, 'the 2 kg of rice that did not come is no longer on order');
+select is((select average_in_base from public.piece_weights('aaaaaaaa-0000-0000-0000-0000000000a1')
+           where item_id = pg_temp.item('Whole chicken')),
+          1240.000::numeric, 'the chickens averaged 1.24 kg a piece');
+
+set local request.jwt.claims to '{"sub":"11111111-1111-1111-1111-111111111111","role":"authenticated"}';
+
+select lives_ok($$ select public.void_goods_receipt(pg_temp.ref('grn3'), 'Entered against the wrong order') $$,
+  'the owner voids that receipt');
+select is(pg_temp.po_status('po2'), 'approved', 'voiding the receipt that closed the order opens it again');
+
+set local request.jwt.claims to '{"sub":"33333333-3333-3333-3333-333333333333","role":"authenticated"}';
+
+select lives_ok($$
+  insert into t_ids select 'grn4', public.post_goods_receipt(
+    'aaaaaaaa-0000-0000-0000-0000000000a1', 'aaaaaaaa-5000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0002-0000000000a1',
+    jsonb_build_array(
+      jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po2', 'Whole chicken'),
+                         'pieces', 12, 'weight', 13, 'unit', 'kg', 'rate', 190),
+      jsonb_build_object('purchase_order_line_id', pg_temp.po_line('po2', 'Rice'), 'quantity', 10),
+      jsonb_build_object('item_id', pg_temp.item('Oil'), 'unit', 'l', 'quantity', 2, 'rate', 150)),
+    pg_temp.ref('po2'), 'INV-202', current_date)
+$$, '12 chickens (13 kg, billed at ₹190 a kg), the rice and some oil that was not ordered arrive');
+select is(pg_temp.po_status('po2'), 'received', 'two chickens more than ordered, and an item not on the order, are accepted');
+select is((select received_in_base from public.purchase_order_lines where id = pg_temp.po_line('po2', 'Whole chicken')),
+          14400::numeric, '12 pieces are counted against the 10 ordered');
+select is((select amount from public.goods_receipt_lines
+           where receipt_id = pg_temp.ref('grn4') and item_id = pg_temp.item('Whole chicken')),
+          2470.00::numeric, 'the chicken line is 13 kg × ₹190 = ₹2,470');
+select is((select average_in_base from public.piece_weights('aaaaaaaa-0000-0000-0000-0000000000a1')
+           where item_id = pg_temp.item('Whole chicken')),
+          1083.333::numeric, 'voided receipts are left out of the average weight: 13 kg / 12 pieces');
 
 select * from finish();
 rollback;

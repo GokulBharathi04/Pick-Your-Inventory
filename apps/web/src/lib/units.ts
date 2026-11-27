@@ -25,7 +25,12 @@ export function fromBase(item: Pick<Item, 'base_unit' | 'alt_unit' | 'alt_per_ba
   return one === 0 ? 0 : round6(qtyBase / one);
 }
 
-// The unit people usually type: kg for gram items, l for millilitre items.
+// The unit an item's stock is shown and typed in (kg, g, l, ml, pcs, dozen).
+export function stockUnit(item: Pick<Item, 'base_unit'> & { stock_unit?: string | null }): string {
+  return item.stock_unit || defaultUnit(item.base_unit);
+}
+
+// The usual unit for a base unit: kg for grams, l for millilitres.
 export function defaultUnit(baseUnit: string): string {
   if (baseUnit === 'g') return 'kg';
   if (baseUnit === 'ml') return 'l';

@@ -5,7 +5,7 @@ import { useAction, useLoad } from '../lib/hooks';
 import { useRoute } from '../lib/router';
 import { run, sb } from '../lib/supabase';
 import { addDays, dayStart, fmtDateTime, fmtNum, fmtQty, isoDay, localDateTimeValue, toNum } from '../lib/format';
-import { defaultUnit, toBase } from '../lib/units';
+import { toBase, stockUnit } from '../lib/units';
 import type { PrepBatch, Recipe, RecipeLine } from '../lib/types';
 import { Badge, Button, Checkbox, DataTable, ErrorNote, Field, FormGrid, Notice, PageHeader, ReasonModal, Section, Toolbar, useToast } from '../components/ui';
 import { ItemSelect, LocationSelect, NeedsOutlet } from '../components/inputs';
@@ -81,7 +81,7 @@ function BatchForm({ recipes, onSaved }: { recipes: Recipe[]; onSaved: () => voi
   const item = ref.item(itemId);
   const recipe = recipes.find(r => r.prep_item_id === itemId);
   const linesQ = useLoad(async () => (recipe ? run<RecipeLine[]>(sb.from('recipe_lines').select('*').eq('recipe_id', recipe.id)) : []), [recipe?.id]);
-  const u = item ? defaultUnit(item.base_unit) : '';
+  const u = item ? stockUnit(item) : '';
   const expected = recipe ? toNum(recipe.yield_qty) * toNum(batches) : 0;
 
   const save = () => act(async () => {

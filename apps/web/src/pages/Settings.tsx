@@ -58,6 +58,7 @@ export default function Settings() {
                     columns={[
                       { label: 'Location', render: l => l.name },
                       { label: 'Kind', render: l => humanize(l.kind) },
+                      { label: 'Receives goods', render: l => (l.receives_goods ? 'Yes' : <span className="text-muted">No</span>) },
                       { label: 'Status', render: l => (l.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>) },
                     ]} />
                   <h3 className="mt-4 mb-2 text-xs font-semibold tracking-wide text-muted uppercase">Departments</h3>
@@ -214,10 +215,13 @@ function LocationModal({ loc, outletId, onClose, onSaved }: { loc: StorageLocati
   const [name, setName] = useState(loc?.name ?? '');
   const [kind, setKind] = useState(loc?.kind ?? 'store');
   const [active, setActive] = useState(loc?.is_active ?? true);
+  // Stores and cold rooms receive goods unless set otherwise; a kitchen can too.
+  const [receivesSet, setReceives] = useState<boolean | null>(loc ? loc.receives_goods : null);
+  const receives = receivesSet ?? (kind === 'store' || kind === 'cold_room');
   const save = () => act(async () => {
     if (!name.trim()) throw new Error('Give the location a name');
-    if (loc) await run(sb.from('storage_locations').update({ name: name.trim(), kind, is_active: active }).eq('id', loc.id));
-    else await run(sb.from('storage_locations').insert({ organisation_id: orgId, outlet_id: outletId, name: name.trim(), kind }));
+    if (loc) await run(sb.from('storage_locations').update({ name: name.trim(), kind, receives_goods: receives, is_active: active }).eq('id', loc.id));
+    else await run(sb.from('storage_locations').insert({ organisation_id: orgId, outlet_id: outletId, name: name.trim(), kind, receives_goods: receives }));
     toast(loc ? 'Location saved' : 'Location added');
     onSaved();
     onClose();
@@ -230,7 +234,11 @@ function LocationModal({ loc, outletId, onClose, onSaved }: { loc: StorageLocati
         <Field label="Name"><input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus /></Field>
         <Field label="Kind" hint="Sales take stock from a kitchen or bar"><Select value={kind} onChange={setKind} options={kinds} /></Field>
       </FormGrid>
-      {loc && <div className="mt-3"><Checkbox label="Active" checked={active} onChange={setActive} /></div>}
+      <div className="mt-3 flex flex-col gap-2">
+        <Checkbox label="Goods are received here" checked={receives} onChange={setReceives} />
+        <p className="pl-6 text-xs text-muted">Vendors can deliver here, and departments are issued from here. Tick it for a kitchen or bar with its own cold storage that takes deliveries directly.</p>
+        {loc && <Checkbox label="Active" checked={active} onChange={setActive} />}
+      </div>
     </Modal>
   );
 }

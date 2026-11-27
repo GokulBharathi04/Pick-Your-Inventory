@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react';
 import { useAccess } from '../lib/access';
 import { useRefData } from '../lib/refdata';
-import { defaultUnit, unitsFor } from '../lib/units';
+import { unitsFor, stockUnit } from '../lib/units';
 import type { Item } from '../lib/types';
 import { Empty, Select, type Option } from './ui';
 import { Link } from '../lib/router';
@@ -14,7 +14,7 @@ export function ItemSelect({ value, onChange, filter, placeholder = 'Choose an i
   const options = useMemo<Option[]>(() => {
     const cat = new Map(categories.map(c => [c.id, c.name]));
     return items
-      .filter(i => (includeInactive || i.is_active || i.id === value) && (!filter || filter(i)))
+      .filter(i => i.id === value || ((includeInactive || i.is_active) && (!filter || filter(i))))
       .map(i => ({ value: i.id, label: i.code ? `${i.name} (${i.code})` : i.name, group: cat.get(i.category_id ?? '') ?? 'No category' }))
       .sort((a, b) => (a.group ?? '').localeCompare(b.group ?? '') || a.label.localeCompare(b.label));
   }, [items, categories, filter, includeInactive, value]);
@@ -41,7 +41,7 @@ export function QtyInput({ item, qty, unit, onQty, onUnit, disabled, placeholder
 
 // Picks the usual entry unit when the item changes.
 export function unitForItem(item: Item | undefined): string {
-  return item ? defaultUnit(item.base_unit) : '';
+  return item ? stockUnit(item) : '';
 }
 
 export function LocationSelect({ value, onChange, placeholder = 'Choose a location', exclude }: {
@@ -54,10 +54,11 @@ export function LocationSelect({ value, onChange, placeholder = 'Choose a locati
   return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} />;
 }
 
-// Store locations of the outlet: issues, returns and goods receipts use only these.
-export function StoreSelect({ value, onChange, placeholder = 'Choose a store' }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
-  const { outletStores } = useRefData();
-  const options = outletStores.filter(l => l.is_active || l.id === value).map(l => ({ value: l.id, label: l.name }));
+// Locations of the outlet that receive goods (stores, and any kitchen or cold
+// room set to): orders, receipts, issues and returns use only these.
+export function ReceivingSelect({ value, onChange, placeholder = 'Choose a location' }: { value: string; onChange: (id: string) => void; placeholder?: string }) {
+  const { receivingLocations } = useRefData();
+  const options = receivingLocations.filter(l => l.is_active || l.id === value).map(l => ({ value: l.id, label: l.name }));
   return <Select value={value} onChange={onChange} options={options} placeholder={placeholder} />;
 }
 

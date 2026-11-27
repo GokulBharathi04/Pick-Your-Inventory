@@ -5,17 +5,16 @@ import { useAction, useLoad } from '../lib/hooks';
 import { navigate, useRoute } from '../lib/router';
 import { run, sb, selectAll } from '../lib/supabase';
 import { fmtDate, fmtNum, fmtQty, fmtRate, humanize, isoDay, toNum } from '../lib/format';
-import { defaultUnit, fromBase, toBase, unitsFor } from '../lib/units';
-import type { Category, Item, ItemOutletSettings, OutletStock, PackSize, VendorItem } from '../lib/types';
+import { fromBase, toBase, unitsFor, stockUnit } from '../lib/units';
+import type { Category, Item, ItemOutletSettings, Num, OutletStock, PackSize, VendorItem } from '../lib/types';
 import { Badge, Button, Checkbox, DataTable, ErrorNote, Field, FormGrid, Modal, PageHeader, Select, Tabs, Toolbar, useToast } from '../components/ui';
 import { QtyInput } from '../components/inputs';
 
 const types = ['raw', 'prep', 'packaging', 'consumable'].map(t => ({ value: t, label: humanize(t) }));
-const baseUnits = [
-  { value: 'g', label: 'Grams (g) — weighed items' },
-  { value: 'ml', label: 'Millilitres (ml) — liquids' },
-  { value: 'pcs', label: 'Pieces (pcs) — counted items' },
-];
+const stockUnitLabels: Record<string, string> = {
+  kg: 'Kilograms (kg)', g: 'Grams (g)', l: 'Litres (l)', ml: 'Millilitres (ml)', pcs: 'Pieces (pcs)', dozen: 'Dozens',
+};
+type PieceWeight = { item_id: string; receipts: number; pieces: Num; weight_in_base: Num; average_in_base: Num };
 const gstRates = ['', '0', '5', '12', '18', '28'].map(r => ({ value: r, label: r === '' ? 'Not set' : `${r}%` }));
 
 export default function Items() {
@@ -69,7 +68,7 @@ export default function Items() {
           { label: 'Item', render: i => <span className="font-medium">{i.name}{i.code && <span className="ml-1 text-xs text-muted">{i.code}</span>}</span> },
           { label: 'Category', render: i => catName.get(i.category_id ?? '') ?? '—' },
           { label: 'Type', render: i => <>{humanize(i.item_type)}{i.item_type === 'prep' && i.deduct_ingredients_on_sale && <span className="ml-1 text-xs text-muted">(made to order)</span>}</> },
-          { label: 'Unit', render: i => i.base_unit },
+          { label: 'Unit', render: i => <>{stockUnit(i)}{i.variable_weight && <span className="ml-1 text-xs text-muted">(weight varies)</span>}</> },
           { label: 'Stock here', num: true, render: i => { const st = outletQ.data?.stock.get(i.id); return st ? <span className={toNum(st.quantity) < 0 ? 'text-red-700' : ''}>{fmtQty(st.quantity, i.base_unit)}</span> : '—'; } },
           { label: 'Reorder level', num: true, render: i => { const s = outletQ.data?.settings.get(i.id); return s?.reorder_level != null ? fmtQty(s.reorder_level, i.base_unit) : '—'; } },
           { label: 'Status', render: i => (i.is_active ? <Badge tone="green">Active</Badge> : <Badge>Inactive</Badge>) },
@@ -112,27 +111,48 @@ export function ItemEditor({ item, onClose, onChanged }: { item: Item | null; on
 }
 
 function ItemDetails({ item, onSaved }: { item: Item | null; onSaved: (i: Item) => void }) {
-  const { orgId, can } = useAccess();
+  const { orgId, outletId, outlet, can } = useAccess();
   const ref = useRefData();
   const toast = useToast();
   const { busy, error, act } = useAction();
   const editable = can('masters.edit');
+  const unitOf = (code: string) => ref.units.find(u => u.code === code);
+  const factor = (code: string) => toNum(unitOf(code)?.factor_to_base) || 1;
+  const stock0 = item ? stockUnit(item) : 'kg';
+  const typical0 = item?.variable_weight && toNum(item.alt_per_base) > 0 ? String(Math.round((1 / toNum(item.alt_per_base) / factor(stock0)) * 1000) / 1000) : '';
   const [f, setF] = useState({
     name: item?.name ?? '', code: item?.code ?? '', category_id: item?.category_id ?? '', item_type: item?.item_type ?? 'raw',
-    base_unit: item?.base_unit ?? 'g', alt: !!item?.alt_unit, alt_unit: item?.alt_unit ?? '', alt_per_base: item?.alt_per_base != null ? String(item.alt_per_base) : '',
+    stock_unit: stock0, variable_weight: item?.variable_weight ?? false, typical: typical0,
+    alt: !!item?.alt_unit && !item?.variable_weight, alt_unit: item?.variable_weight ? '' : item?.alt_unit ?? '',
+    alt_per_base: item?.alt_per_base != null && !item.variable_weight ? String(item.alt_per_base) : '',
     default_yield_pct: item ? String(item.default_yield_pct) : '100', shelf_life_days: item?.shelf_life_days != null ? String(item.shelf_life_days) : '',
     track_expiry: item?.track_expiry ?? false, hsn_code: item?.hsn_code ?? '', gst_rate: item?.gst_rate != null ? String(toNum(item.gst_rate)) : '',
     deduct_ingredients_on_sale: item?.deduct_ingredients_on_sale ?? false, is_active: item?.is_active ?? true,
   });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF(x => ({ ...x, [k]: v }));
-  const altChoices = ['g', 'ml', 'pcs'].filter(u => u !== f.base_unit).map(u => ({ value: u, label: u }));
+  const base = unitOf(f.stock_unit)?.base_code ?? 'g';
+  const weighed = base === 'g';
+  const altChoices = ['g', 'ml', 'pcs'].filter(u => u !== base).map(u => ({ value: u, label: u }));
+  const stockChoices = ref.units.map(u => ({ value: u.code, label: stockUnitLabels[u.code] ?? u.name }));
+
+  // Average weight per piece from recent receipts at this outlet.
+  const weightsQ = useLoad(async () => {
+    if (!item?.variable_weight || !outletId) return null;
+    const rows = await run<PieceWeight[]>(sb.rpc('piece_weights', { p_outlet_id: outletId }));
+    return rows.find(r => r.item_id === item.id) ?? null;
+  }, [item?.id, item?.variable_weight, outletId]);
+  const avg = weightsQ.data;
 
   const save = () => act(async () => {
     if (!f.name.trim()) throw new Error('Give the item a name');
-    if (f.alt && (!f.alt_unit || toNum(f.alt_per_base) <= 0)) throw new Error('Fill in the conversion, e.g. 1 pcs = 50 g');
+    const variable = weighed && f.variable_weight;
+    if (variable && toNum(f.typical) <= 0) throw new Error(`Enter the typical weight of one piece, in ${f.stock_unit}`);
+    if (!variable && f.alt && (!f.alt_unit || toNum(f.alt_per_base) <= 0)) throw new Error('Fill in the conversion, e.g. 1 pcs = 50 g');
     const values = {
-      name: f.name.trim(), code: f.code.trim() || null, category_id: f.category_id || null, item_type: f.item_type, base_unit: f.base_unit,
-      alt_unit: f.alt ? f.alt_unit : null, alt_per_base: f.alt ? toNum(f.alt_per_base) : null,
+      name: f.name.trim(), code: f.code.trim() || null, category_id: f.category_id || null, item_type: f.item_type,
+      base_unit: base, stock_unit: f.stock_unit, variable_weight: variable,
+      alt_unit: variable ? 'pcs' : f.alt ? f.alt_unit : null,
+      alt_per_base: variable ? 1 / (toNum(f.typical) * factor(f.stock_unit)) : f.alt ? toNum(f.alt_per_base) : null,
       default_yield_pct: toNum(f.default_yield_pct) || 100, shelf_life_days: f.shelf_life_days ? Math.round(toNum(f.shelf_life_days)) : null,
       track_expiry: f.track_expiry, hsn_code: f.hsn_code.trim() || null, gst_rate: f.gst_rate === '' ? null : toNum(f.gst_rate),
       deduct_ingredients_on_sale: f.item_type === 'prep' ? f.deduct_ingredients_on_sale : false,
@@ -153,21 +173,47 @@ function ItemDetails({ item, onSaved }: { item: Item | null; onSaved: (i: Item) 
           <Field label="Code" hint="Optional, unique"><input className="input" value={f.code} onChange={e => set('code', e.target.value)} /></Field>
           <Field label="Category"><Select value={f.category_id} onChange={v => set('category_id', v)} placeholder="No category" options={ref.categories.filter(c => c.is_active || c.id === f.category_id).map(c => ({ value: c.id, label: c.name }))} /></Field>
           <Field label="Type" hint={f.item_type === 'prep' ? 'Made in the kitchen from a recipe' : undefined}><Select value={f.item_type} onChange={v => set('item_type', v as Item['item_type'])} options={types} /></Field>
-          <Field label="Stock unit" hint={item ? 'Can’t change once the item has stock' : 'Stock is always held in this unit'}><Select value={f.base_unit} onChange={v => set('base_unit', v)} options={baseUnits} /></Field>
+          <Field label="Stock unit" hint={item ? 'kg ↔ g or l ↔ ml any time; weight, volume or pieces only before it has stock' : 'Stock is shown and counted in this unit'}>
+            <Select value={f.stock_unit} onChange={v => set('stock_unit', v)} options={stockChoices} />
+          </Field>
           <Field label="Usable yield %" hint="e.g. 85 for onions after peeling"><input className="input" type="number" min="1" max="100" step="any" value={f.default_yield_pct} onChange={e => set('default_yield_pct', e.target.value)} /></Field>
           <Field label="Shelf life (days)"><input className="input" type="number" min="1" value={f.shelf_life_days} onChange={e => set('shelf_life_days', e.target.value)} /></Field>
           <Field label="HSN code"><input className="input" inputMode="numeric" value={f.hsn_code} onChange={e => set('hsn_code', e.target.value)} /></Field>
           <Field label="GST rate"><Select value={f.gst_rate} onChange={v => set('gst_rate', v)} options={gstRates} /></Field>
         </FormGrid>
         <div className="mt-4 flex flex-col gap-3">
-          <Checkbox label="Also measured in another unit (e.g. eggs in pieces and grams)" checked={f.alt} onChange={v => set('alt', v)} />
-          {f.alt && (
-            <div className="flex flex-wrap items-center gap-2 pl-6 text-sm">
-              1 {f.base_unit} =
-              <input className="input w-28" type="number" min="0" step="any" value={f.alt_per_base} onChange={e => set('alt_per_base', e.target.value)} />
-              <Select className="w-24" value={f.alt_unit} onChange={v => set('alt_unit', v)} options={altChoices} placeholder="unit" />
+          {weighed && (
+            <div>
+              <Checkbox label="Weight varies piece to piece (e.g. whole chicken)" checked={f.variable_weight} onChange={v => set('variable_weight', v)} />
+              {f.variable_weight && (
+                <div className="mt-2 flex flex-col gap-2 pl-6 text-sm">
+                  <p className="text-muted">Stock is kept by weight. Order and count it in pieces; each receipt records how many pieces came and what they weighed, so stock and cost follow the real weight.</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    Typical weight of 1 piece
+                    <input className="input w-28" type="number" min="0" step="any" value={f.typical} onChange={e => set('typical', e.target.value)} aria-label="Typical weight of 1 piece" />
+                    {f.stock_unit}
+                  </div>
+                  {avg && toNum(avg.pieces) > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-muted">
+                      Recent average at {outlet?.name}: <span className="font-medium text-ink">{fmtQty(avg.average_in_base, 'g')}</span> a piece
+                      ({fmtNum(avg.pieces, 0)} pieces over {avg.receipts} {avg.receipts === 1 ? 'receipt' : 'receipts'})
+                      {editable && <Button size="sm" variant="ghost" onClick={() => set('typical', String(Math.round((toNum(avg.average_in_base) / factor(f.stock_unit)) * 1000) / 1000))}>Use this</Button>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
+          {!(weighed && f.variable_weight) && <>
+            <Checkbox label="Also measured in another unit (e.g. eggs in pieces and grams)" checked={f.alt} onChange={v => set('alt', v)} />
+            {f.alt && (
+              <div className="flex flex-wrap items-center gap-2 pl-6 text-sm">
+                1 {base} =
+                <input className="input w-28" type="number" min="0" step="any" value={f.alt_per_base} onChange={e => set('alt_per_base', e.target.value)} />
+                <Select className="w-24" value={f.alt_unit} onChange={v => set('alt_unit', v)} options={altChoices} placeholder="unit" />
+              </div>
+            )}
+          </>}
           <Checkbox label="Track expiry dates" checked={f.track_expiry} onChange={v => set('track_expiry', v)} />
           {f.item_type === 'prep' && (
             <Checkbox label="Made to order: a sale deducts its ingredients instead of its own stock" checked={f.deduct_ingredients_on_sale} onChange={v => set('deduct_ingredients_on_sale', v)} />
@@ -187,7 +233,7 @@ function PackSizes({ item, onChanged }: { item: Item; onChanged: () => void }) {
   const { busy, error, act } = useAction();
   const [name, setName] = useState('');
   const [qty, setQty] = useState('');
-  const [unit, setUnit] = useState(defaultUnit(item.base_unit));
+  const [unit, setUnit] = useState(stockUnit(item));
   const packs = ref.packSizes.filter(p => p.item_id === item.id);
 
   const add = () => act(async () => {
@@ -229,7 +275,7 @@ function OutletSettings({ item, onChanged }: { item: Item; onChanged: () => void
   const ref = useRefData();
   const toast = useToast();
   const { busy, error, act } = useAction();
-  const unit0 = defaultUnit(item.base_unit);
+  const unit0 = stockUnit(item);
   const q = useLoad(() => run<ItemOutletSettings[]>(sb.from('item_outlet_settings').select('*').eq('outlet_id', outletId).eq('item_id', item.id)), [outletId, item.id]);
   const existing = q.data?.[0];
   const [f, setF] = useState<null | { is_stocked: boolean; preferred_vendor_id: string; default_location_id: string; reorder_level: string; reorder_unit: string; reorder_qty: string; reorder_qty_unit: string; max_level: string; lead_time_days: string }>(null);
