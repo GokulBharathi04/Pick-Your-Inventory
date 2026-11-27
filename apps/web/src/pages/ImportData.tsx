@@ -4,13 +4,13 @@ import { useRefData } from '../lib/refdata';
 import { useRoute } from '../lib/router';
 import { errorText, run, sb } from '../lib/supabase';
 import { csvObjects, downloadCsv } from '../lib/csv';
-import { isoDay, toNum } from '../lib/format';
+import { fmtMoney, isoDay, toNum } from '../lib/format';
 import { toBase } from '../lib/units';
-import type { Category, Item } from '../lib/types';
+import type { Category, Item, MenuCategory } from '../lib/types';
 import { Badge, Button, ErrorNote, Field, Notice, PageHeader, Section, Select } from '../components/ui';
 
-type Kind = 'items' | 'vendors' | 'rates' | 'opening';
-type Row = { data: Record<string, string>; problem: string | null; status: 'ready' | 'done' | 'failed' | 'skipped'; message?: string };
+type Kind = 'items' | 'vendors' | 'rates' | 'opening' | 'menu';
+type Row = { data: Record<string, string>; problem: string | null; status: 'ready' | 'done' | 'failed' | 'skipped'; message?: string; note?: string };
 
 const templates: Record<Kind, { title: string; columns: string[]; example: string[]; help: string }> = {
   items: {
@@ -31,6 +31,12 @@ const templates: Record<Kind, { title: string; columns: string[]; example: strin
     example: ['Koyambedu Fresh', 'Tomato', 'Crate', '', '480', isoDay()],
     help: 'Give either pack (a pack size name of the item) or unit (such as kg). rate is in rupees before GST. valid_from is YYYY-MM-DD and defaults to today.',
   },
+  menu: {
+    title: 'Menu (dishes and prices)',
+    columns: ['category', 'item', 'price'],
+    example: ['Biryani', 'Chicken biryani', '250'],
+    help: 'item is the dish name and price is the selling price in rupees. New menu categories are created. A dish already on the menu gets the new price and category. GST is set to 5%; change it on the dish if needed.',
+  },
   opening: {
     title: 'Opening stock',
     columns: ['item', 'location', 'quantity', 'unit', 'cost_per_unit'],
@@ -40,6 +46,17 @@ const templates: Record<Kind, { title: string; columns: string[]; example: strin
 };
 
 const norm = (s: string | undefined) => (s ?? '').trim().toLowerCase();
+
+// Other headers people use for the menu's columns.
+const menuHeaders: Record<string, string> = {
+  categories: 'category', menu_category: 'category', items: 'item', dish: 'item', dishes: 'item', dish_name: 'item', name: 'item',
+  item_name: 'item', prices: 'price', selling_price: 'price', rate: 'price', mrp: 'price',
+};
+// "₹1,250" or "1,250.00" → 1250; null when blank; NaN when not a number.
+const priceOf = (s: string | undefined): number | null => {
+  const t = (s ?? '').replace(/[₹,\s]/g, '').replace(/^rs\.?/i, '');
+  return t === '' ? null : Number(t);
+};
 
 export default function ImportData() {
   const route = useRoute();
@@ -57,7 +74,9 @@ export default function ImportData() {
     itemByCode: new Map(ref.items.filter(i => i.code).map(i => [norm(i.code ?? ''), i])),
     vendorByName: new Map(ref.vendors.map(v => [norm(v.name), v])),
     locByName: new Map(ref.outletLocations.map(l => [norm(l.name), l])),
-  }), [ref.items, ref.vendors, ref.outletLocations]);
+    dishByName: new Map(ref.menuItems.map(m => [norm(m.name), m])),
+    menuCatByName: new Map(ref.menuCategories.map(c => [norm(c.name), c])),
+  }), [ref.items, ref.vendors, ref.outletLocations, ref.menuItems, ref.menuCategories]);
 
   const findItem = (s: string): Item | undefined => lookups.itemByName.get(norm(s)) ?? lookups.itemByCode.get(norm(s));
 
@@ -73,6 +92,13 @@ export default function ImportData() {
     if (kind === 'vendors') {
       if (!d.name) return 'name is missing';
       if (d.preferred_channel && !['whatsapp', 'email', 'sms'].includes(norm(d.preferred_channel))) return 'preferred_channel must be whatsapp, email or sms';
+      return null;
+    }
+    if (kind === 'menu') {
+      if (!d.item) return 'item is missing';
+      if (d.item.trim().length > 120) return 'item name is longer than 120 letters';
+      const price = priceOf(d.price);
+      if (price !== null && (Number.isNaN(price) || price < 0)) return `price "${d.price}" is not an amount`;
       return null;
     }
     if (kind === 'rates') {
@@ -98,11 +124,35 @@ export default function ImportData() {
     if (!file) return;
     setError(null);
     const text = await file.text();
-    const objs = csvObjects(text);
+    let objs = csvObjects(text);
     if (objs.length === 0) { setError('That file has no rows under its header.'); return; }
-    const missing = t.columns.filter(c => !(c in objs[0]) && ['name', 'stock_unit', 'vendor', 'item', 'rate', 'location', 'quantity'].includes(c));
+    if (kind === 'menu') {
+      objs = objs.map(o => Object.fromEntries(Object.entries(o).map(([k, v]) => [menuHeaders[k] ?? k, v])));
+    }
+    const missing = t.columns.filter(c => !(c in objs[0]) && ['name', 'stock_unit', 'vendor', 'item', 'rate', 'location', 'quantity', 'price'].includes(c));
     if (missing.length) { setError(`The header is missing: ${missing.join(', ')}`); return; }
-    setRows(objs.map(d => { const problem = check(d); return { data: d, problem, status: problem ? 'skipped' : 'ready' }; }));
+    const seen = new Set<string>();
+    setRows(objs.map(d => {
+      let problem = check(d);
+      let note: string | undefined;
+      if (!problem && kind === 'menu') {
+        if (seen.has(norm(d.item))) problem = 'Repeated in this file';
+        seen.add(norm(d.item));
+        const dish = lookups.dishByName.get(norm(d.item));
+        const price = priceOf(d.price) ?? 0;
+        if (!problem && dish) {
+          const changes: string[] = [];
+          if (toNum(dish.selling_price) !== price) changes.push(`price ${fmtMoney(dish.selling_price)} → ${fmtMoney(price)}`);
+          const cat = d.category ? lookups.menuCatByName.get(norm(d.category)) : undefined;
+          if (d.category && cat?.id !== dish.category_id) changes.push(`category → ${d.category.trim()}`);
+          if (changes.length === 0) return { data: d, problem: null, status: 'skipped', message: 'Already on the menu' };
+          note = `Updates ${changes.join(', ')}`;
+        } else if (!problem) {
+          note = priceOf(d.price) === null ? 'New dish, no price (₹0)' : 'New dish';
+        }
+      }
+      return { data: d, problem, status: problem ? 'skipped' : 'ready', note };
+    }));
     e.target.value = '';
   };
 
@@ -115,15 +165,41 @@ export default function ImportData() {
     return c.id;
   };
 
+  const ensureMenuCategory = async (name: string, cache: Map<string, MenuCategory>): Promise<string | null> => {
+    if (!name.trim()) return null;
+    const found = cache.get(norm(name)) ?? lookups.menuCatByName.get(norm(name));
+    if (found) return found.id;
+    const c = await run<MenuCategory>(sb.from('menu_categories').insert({
+      organisation_id: orgId, name: name.trim(), sort_order: (ref.menuCategories.length + cache.size + 1) * 10,
+    }).select().single());
+    cache.set(norm(name), c);
+    return c.id;
+  };
+
   const runImport = async () => {
     setBusy(true);
     const cats = new Map<string, Category>();
+    const menuCats = new Map<string, MenuCategory>();
     const next = [...rows];
     for (let i = 0; i < next.length; i++) {
       const r = next[i];
       if (r.status !== 'ready') continue;
       const d = r.data;
       try {
+        if (kind === 'menu') {
+          const dish = lookups.dishByName.get(norm(d.item));
+          const price = priceOf(d.price) ?? 0;
+          const categoryId = await ensureMenuCategory(d.category ?? '', menuCats);
+          if (dish) {
+            await run(sb.from('menu_items').update({ selling_price: price, ...(categoryId ? { category_id: categoryId } : {}) }).eq('id', dish.id));
+            next[i] = { ...r, status: 'done', message: 'Updated' };
+          } else {
+            await run(sb.from('menu_items').insert({ organisation_id: orgId, name: d.item.trim(), category_id: categoryId, selling_price: price, gst_rate: 5 }));
+            next[i] = { ...r, status: 'done', message: 'Added' };
+          }
+          setRows([...next]);
+          continue;
+        }
         if (kind === 'items') {
           if (lookups.itemByName.get(norm(d.name))) { next[i] = { ...r, status: 'skipped', message: 'Already exists' }; continue; }
           const stock = ref.units.find(u => u.code === norm(d.stock_unit));
@@ -176,12 +252,12 @@ export default function ImportData() {
 
   const ready = rows.filter(r => r.status === 'ready').length;
   const done = rows.filter(r => r.status === 'done').length;
-  const allowed = kind === 'opening' ? can('stock.adjust') : can('masters.edit');
+  const allowed = kind === 'opening' ? can('stock.adjust') : kind === 'menu' ? can('recipes.edit') : can('masters.edit');
 
   return (
     <div>
       <PageHeader title="Import from a spreadsheet" subtitle="Save your sheet as CSV, check the preview, then import"
-        back={{ to: kind === 'vendors' || kind === 'rates' ? '/vendors' : kind === 'opening' ? '/adjustments' : '/items', label: 'Back' }} />
+        back={{ to: kind === 'vendors' || kind === 'rates' ? '/vendors' : kind === 'opening' ? '/adjustments' : kind === 'menu' ? '/menu' : '/items', label: 'Back' }} />
       <Section title="1. What are you importing?">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Import" className="w-56">
@@ -211,7 +287,7 @@ export default function ImportData() {
                     <td className="text-muted">{i + 1}</td>
                     {t.columns.map(c => <td key={c}>{r.data[c]}</td>)}
                     <td>
-                      {r.status === 'ready' && <Badge tone="blue">Ready</Badge>}
+                      {r.status === 'ready' && <Badge tone="blue">{r.note ? `Ready · ${r.note}` : 'Ready'}</Badge>}
                       {r.status === 'done' && <Badge tone="green">{r.message}</Badge>}
                       {r.status === 'failed' && <Badge tone="red">{r.message}</Badge>}
                       {r.status === 'skipped' && <Badge tone="amber">{r.problem ?? r.message}</Badge>}
@@ -221,6 +297,7 @@ export default function ImportData() {
               </tbody>
             </table>
           </div>
+          {kind === 'menu' && done > 0 && <p className="mt-3 text-sm text-muted">Dishes are sold at every outlet unless you untick them on the dish. Add each dish’s recipe in Menu and recipes so sales deduct stock.</p>}
           {kind === 'opening' && done > 0 && <p className="mt-3 text-sm text-muted">The opening stock is waiting for approval in Opening stock and adjustments.</p>}
         </Section>
       )}

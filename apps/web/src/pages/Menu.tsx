@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAccess } from '../lib/access';
 import { useRefData } from '../lib/refdata';
 import { useAction, useLoad } from '../lib/hooks';
+import { navigate } from '../lib/router';
 import { run, sb, selectAll } from '../lib/supabase';
 import { fmtMoney, fmtPct, fmtQty, toNum } from '../lib/format';
 import { toBase, stockUnit } from '../lib/units';
@@ -44,6 +45,7 @@ export default function Menu() {
       <PageHeader title="Menu and recipes" subtitle="Dishes, what goes into them, and what they cost at this outlet"
         actions={can('recipes.edit') && tab === 'dishes' && <>
           <Button variant="secondary" onClick={() => setShowCats(true)}>Menu categories</Button>
+          <Button variant="secondary" onClick={() => navigate('/import?type=menu')}>Import</Button>
           <Button onClick={() => setEditing('new')}>Add dish</Button>
         </>} />
       <ErrorNote error={q.error} />

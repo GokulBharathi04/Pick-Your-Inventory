@@ -116,7 +116,7 @@ function Shell() {
   const key = tab?.key ?? (segment || 'home');
   let Screen: ComponentType | undefined = screens[key];
   let allowed = !tab?.view_permission || can(tab.view_permission);
-  if (key === 'import') { Screen = ImportData; allowed = can('masters.edit') || can('stock.adjust'); }
+  if (key === 'import') { Screen = ImportData; allowed = can('masters.edit') || can('stock.adjust') || can('recipes.edit'); }
   if (key === 'stock' && route.segments[1] === 'card') { Screen = StockCard; allowed = can('stock.view'); }
 
   const name = access?.full_name || toUsername(access?.email);
